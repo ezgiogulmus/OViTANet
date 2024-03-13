@@ -70,14 +70,14 @@ def main(args=None):
 		sys.exit()
 	
 	if args.csv_path is None:
-		args.csv_path = "./datasets_csv/"+split_name+".csv"
+		args.csv_path = f"{args.csv_dir}/"+split_name+".csv"
 	print("Loading all the data ...")
 	df = pd.read_csv(args.csv_path, compression="zip" if ".zip" in args.csv_path else None)
 
 	gen_data = np.unique([i.split("_")[-1] for i in tabular_cols if i.split("_")[-1] in ["pro", "rna", "rnz", "dna", "mut", "cnv"]])
 	if len(gen_data) > 0:
 		for g in gen_data:
-			gen_df = pd.read_csv(f"./datasets_csv/{split_name}_{g}.csv.zip", compression="zip")
+			gen_df = pd.read_csv(f"{args.csv_dir}/{split_name}_{g}.csv.zip", compression="zip")
 			df = pd.merge(df, gen_df, on='case_id')#, how="outer")
 	df = df.reset_index(drop=True).drop(df.index[df["event"].isna()]).reset_index(drop=True)
 	# assert df.isna().any().any() == False, "There are NaN values in the dataset."
@@ -151,6 +151,7 @@ def setup_argparse():
 	parser = argparse.ArgumentParser(description='Configurations for Survival Analysis on TCGA Data.')
 	parser.add_argument('--run_name',      type=str, default='run')
 	parser.add_argument('--csv_path',   type=str, default=None)
+	parser.add_argument('--csv_dir', type=str, default="./datasets_csv")
 	parser.add_argument('--run_config_file',      type=str, default=None)
 	### Checkpoint + Misc. Pathing Parameters
 	parser.add_argument('--wandb',		 action='store_true', default=False)

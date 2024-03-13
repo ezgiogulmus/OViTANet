@@ -146,10 +146,15 @@ class Generic_WSI_Survival_Dataset(Dataset):
 				if slide_data[col].isna().any():
 					slide_data[col] = slide_data[col].fillna(stats["median"].loc[col])
 
-		print("Z-score normalization with train mean and std")
+		print("MinMax normalization with train min and max")
+		# print("Z-score normalization with train mean and std")
 		print("\tBefore: {:.2f} - {:.2f}" .format(slide_data[self.indep_vars].min().min(), slide_data[self.indep_vars].max().max()))
 		for col_idx, col in enumerate(self.indep_vars):
-			slide_data[col] = (slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
+			# slide_data[col] = (slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
+			denominator = (stats["max"].loc[col] - stats["min"].loc[col])
+			if denominator == 0:
+				denominator = 1
+			slide_data[col] = (slide_data[col] - stats["min"].loc[col]) / denominator
 		print("\tAfter: {:.2f} - {:.2f}" .format(slide_data[self.indep_vars].min().min(), slide_data[self.indep_vars].max().max()))
 		assert slide_data.isna().sum().sum() == 0, "There are still NaN values in the data."
 		return slide_data
@@ -205,14 +210,22 @@ class Generic_Split(MIL_Survival_Dataset):
 	def __len__(self):
 		return len(self.slide_data)
 
+	# def get_stats(self):
+	# 	median_vals = self.slide_data[self.indep_vars].median()
+	# 	mean_vals = self.slide_data[self.indep_vars].mean()
+	# 	std_vals = self.slide_data[self.indep_vars].std()
+	# 	std_vals[std_vals == 0] = 1
+	# 	assert 0 not in std_vals.values, "There are still 0 values in the standard deviation."
+	# 	stats = pd.concat([median_vals, mean_vals, std_vals], axis=1)
+	# 	stats.columns = ['median', 'mean', 'std']
+	# 	return stats
 	def get_stats(self):
 		median_vals = self.slide_data[self.indep_vars].median()
-		mean_vals = self.slide_data[self.indep_vars].mean()
-		std_vals = self.slide_data[self.indep_vars].std()
-		std_vals[std_vals == 0] = 1
-		assert 0 not in std_vals.values, "There are still 0 values in the standard deviation."
-		stats = pd.concat([median_vals, mean_vals, std_vals], axis=1)
-		stats.columns = ['median', 'mean', 'std']
+		min_vals = self.slide_data[self.indep_vars].min()
+		max_vals = self.slide_data[self.indep_vars].max()
+		
+		stats = pd.concat([median_vals, min_vals, max_vals], axis=1)
+		stats.columns = ['median', 'min', 'max']
 		return stats
 
 	def preprocess(self, stats):
@@ -223,9 +236,16 @@ class Generic_Split(MIL_Survival_Dataset):
 					print("\tProcessing:", col_idx, "/", len(self.indep_vars))
 				if self.slide_data[col].isna().any():
 					self.slide_data[col] = self.slide_data[col].fillna(stats["median"].loc[col])
-			print("Z-score normalization with train mean and std")
+			# print("Z-score normalization with train mean and std")
+			# for col_idx, col in enumerate(self.indep_vars):
+			# 	self.slide_data[col] = (self.slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
+			print("MinMax normalization with train min and max")
 			for col_idx, col in enumerate(self.indep_vars):
-				self.slide_data[col] = (self.slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
+				denominator = (stats["max"].loc[col] - stats["min"].loc[col])
+				if denominator == 0:
+					denominator = 1
+				self.slide_data[col] = (self.slide_data[col] - stats["min"].loc[col]) / denominator
+				
 			print(self.slide_data[self.indep_vars].max().max(), self.slide_data[self.indep_vars].min().min())
 		assert self.slide_data.isna().sum().sum() == 0, "There are still NaN values in the data."
 	

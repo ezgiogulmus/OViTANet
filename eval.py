@@ -47,8 +47,7 @@ def main(eval_args):
 	tabular_cols = []
 	if args.nb_tabular_data > 0:
 		# tabular_cols = ["age"]
-		tabular_cols = get_tabular_data(args)
-			
+		tabular_cols = get_tabular_data(args)	
 
 	args.data_root_dir = data_root_dir
 	args.split_dir = split_dir

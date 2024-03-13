@@ -184,8 +184,8 @@ def setup_argparse():
 	parser.add_argument("--mlp_depth", default=5, type=int)
 
 	parser.add_argument("--depth", default=5, type=int)
-	parser.add_argument("--mha_heads", default=4, type=int)
-	parser.add_argument("--model_dim", default=None, help="to decrease nb of patch features")
+	parser.add_argument("--mha_heads", default=6, type=int)
+	parser.add_argument("--model_dim", default=256, help="to decrease nb of patch features")
 	parser.add_argument("--mlp_dim", default=64, type=int, help="Hidden dim during FeedForward")
 	parser.add_argument("--dim_head", default=64, type=int, help="inner_dim = dim_head * heads")
 	parser.add_argument("--pool", default="cls", choices=["cls", "mean"])
@@ -194,11 +194,11 @@ def setup_argparse():
 	parser.add_argument('--opt',             type=str, choices = ['adam', 'sgd'], default='adam')
 	parser.add_argument('--batch_size',      type=int, default=1, help='Batch Size (Default: 1, due to varying bag sizes)')
 	parser.add_argument('--gc',              type=int, default=256, help='Gradient Accumulation Step during training (Gradients are calculated for every 256 patients)')
-	parser.add_argument('--max_epochs',      type=int, default=50, help='Maximum number of epochs to train')
+	parser.add_argument('--max_epochs',      type=int, default=30, help='Maximum number of epochs to train')
 	
 	parser.add_argument('--lr',				 type=float, default=0.001, help='Learning rate')
 	parser.add_argument('--train_fraction',      type=float, default=.5, help='fraction of training patches')
-	parser.add_argument('--reg', 			 type=float, default=0.0001, help='L2-regularization weight decay')
+	parser.add_argument('--reg', 			 type=float, default=0.001, help='L2-regularization weight decay')
 	
 	parser.add_argument('--weighted_sample', action='store_true', default=False, help='Enable weighted sampling')
 	parser.add_argument('--early_stopping',  default=10, type=int, help='Enable early stopping')
@@ -265,29 +265,51 @@ if __name__ == "__main__":
 		parameter_dict = {
 			"opt": {
 				"values": ["sgd", "adam"]
+				# "value": "adam"
 			},
 			"lr":{
 				"values": [1e-5, 1e-4, 1e-3]
+				# "value": 1e-3
 			},
 			"reg":{
-				"values": [1e-5, 1e-4, 1e-3]
+				"values": [1e-2, 1e-4, 1e-3]
 			},
 			'drop_out': {
 				"values": [.25, .50, .75]
 			},
-			'model_dim': {
-				"values": [None, 128, 256]
+			
+			"gc": {
+				"value": 1
 			},
-			'depth': {
-				"values": [3, 5]
-			},
-			'mha_heads': {
-				"values": [4, 6]
-			},
-			'dim_head': {
-				"values": [16, 64]
-			}
+			
 		}
+		if "SSL" in args.run_name:
+			parameter_dict.update({
+				'model_dim': {
+					"values": [None, 128, 256]
+				},
+				'depth': {
+					"values": [3, 5]
+				},
+				'mha_heads': {
+					"values": [4, 6]
+				},
+				'dim_head': {
+					"values": [16, 64]
+				}
+			})
+		else:
+			parameter_dict.update({
+				"mlp_type": {
+					"values": ["tiny", "small", "big"]
+				},
+				"activation": {
+					"values": ["relu", "leakyrelu", "gelu"]
+				},
+				"mlp_depth": {
+					"values": [3, 5, 7]
+				}
+			})
 		sweep_config = {
 			'method': 'random',
 			'metric': {

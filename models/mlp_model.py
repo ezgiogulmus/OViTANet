@@ -63,7 +63,7 @@ class MLP(nn.Module):
 
         initialize_weights(self)
 
-    def forward(self, x, return_feats=False):
+    def forward(self, x):
         
         skip_x = x
         skip_idx = 0
@@ -79,7 +79,7 @@ class MLP(nn.Module):
                 skip_idx += 1
 
         x = self.to_feats(x)
-        if self.feat_extractor or return_feats:
+        if self.feat_extractor:
             return x
         x = self.final(x)
         return x

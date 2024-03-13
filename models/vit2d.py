@@ -97,25 +97,24 @@ class Transformer(nn.Module):
 
     def forward(self, x, tab=None):
         for i, (attn, ff) in enumerate(self.layers):
-            if self.mm_fusion == "crossatt":
-                
-                if i == len(self.layers) - 1:
-                    att_out, attn_weights = attn(x, tab=tab, return_weights=True)
-                else:
-                    att_out = attn(x, tab=tab)
+            if self.mm_fusion == "crossatt" and i == len(self.layers) - 1:
+                att_out, attn_weights = attn(x, tab=tab, return_weights=True)
+                # else:
+                #     att_out = attn(x, tab=tab)
                 x = att_out + x
             else:
                 if i == len(self.layers) - 1:
+                    if self.mm_fusion == "concat":
+                        x = torch.cat([x, tab], dim=1)
+                    elif self.mm_fusion == "adaptive":
+                        x = tab * self.tab_weights + self.img_weights * x
+                    elif self.mm_fusion == "multiply":
+                        x = torch.mul(tab, x)
+                    
                     att_out, attn_weights = attn(x, return_weights=True)
                 else:
                     att_out = attn(x)
                 x = att_out + x
-                if self.mm_fusion == "concat":
-                    x = torch.cat([x, tab], dim=1)
-                elif self.mm_fusion == "adaptive":
-                    x = tab * self.tab_weights + self.img_weights * x
-                elif self.mm_fusion == "multiply":
-                    x = torch.mul(tab, x)
             x = ff(x) + x
 
         return self.norm(x), attn_weights
@@ -151,7 +150,7 @@ class ViT(nn.Module):
         elif self.mm_fusion_type == "late":
             assert self.mm_fusion in ["concat", "adaptive", "multiply", "bilinear"], "Fusion method is not implemented for the selected level."
 
-        target_tab_features = target_features if self.mm_fusion_type == "late" else path_input_dim
+        target_tab_features = target_features if self.mm_fusion_type == "late" else self.model_dim
 
         if nb_tabular_data > 0:
             self.tabular_emb = MLP(
@@ -177,7 +176,11 @@ class ViT(nn.Module):
                 if self.mm_fusion_type == "late":
                     target_features *= 2
 
-        self.mlp_head = nn.Linear(target_features, n_classes)
+        self.mlp_head = nn.Sequential(
+            nn.ReLU(),
+            nn.Dropout(drop_out),
+            nn.Linear(target_features, n_classes)
+        )
         initialize_weights(self)
 
     def forward(self, return_weights=False, **kwargs):

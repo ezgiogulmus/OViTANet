@@ -90,7 +90,7 @@ def init_model(args, ckpt_path=None):
             "path_input_dim": args.path_input_dim,
             "depth": args.depth, 
             "mha_heads": args.mha_heads, 
-            "model_dim": args.model_dim, 
+            "model_dim": args.model_dim if args.model_dim not in [None, "None", "none"] else None, 
             "mlp_dim": args.mlp_dim,
             "dim_head": args.dim_head,
             "pool": args.pool
@@ -262,7 +262,7 @@ def loop_survival(
             # print(data_WSI.shape)
             data_WSI = data_WSI[random_ids]
             # print(data_WSI.shape)
-        data_WSI = data_WSI.to(device) if "path" in mode else None
+        data_WSI = data_WSI.to(device) if mode != "tab" else None
         data_tab = data_tab.to(device) if "tab" in mode else None
         
         y_disc = y_disc.to(device)
@@ -270,7 +270,7 @@ def loop_survival(
         event = event.to(device)
         
         with torch.set_grad_enabled(training):
-            if window_size and "path" in mode:
+            if window_size and mode != "tab":
                 nb_patch, nb_feats = data_WSI.shape
                 slide_h = []
                 if return_feats or return_summary:
@@ -288,20 +288,21 @@ def loop_survival(
                 logits = torch.mean(torch.stack(slide_h), 0)
                 if return_feats or return_summary:
                     feats = torch.mean(torch.stack(slide_feats), 0)
-                    atts = torch.concatenate(slide_atts, -1)
+                    # atts = torch.concatenate(slide_atts, -1)
                     all_features.append(feats.detach().cpu().numpy())
-                    all_attentions.append(atts.detach().cpu().numpy())
+                    # all_attentions.append(atts.detach().cpu().numpy())
             else:
-                if "path" in mode:
+                if mode == "tab":
+                    logits = model(data_tab)
+                else:
                     out = model(x_path=data_WSI, x_tabular=data_tab, return_feats=return_feats or return_summary)
-                else:
-                    out = model(data_tab, return_feats=return_feats or return_summary)
-                if return_feats or return_summary:
-                    logits, feats, atts = out
-                    all_features.append(feats.detach().cpu().numpy())
-                    all_attentions.append(atts.detach().cpu().numpy())
-                else:
-                    logits = out
+
+                    if return_feats or return_summary:
+                        logits, feats, atts = out
+                        all_features.append(feats.detach().cpu().numpy())
+                        # all_attentions.append(atts.detach().cpu().numpy())
+                    else:
+                        logits = out
 
         if discrete_time:
             hazards = torch.sigmoid(logits)
@@ -320,13 +321,14 @@ def loop_survival(
         all_risk_scores.append(risk)
         
         if return_summary and discrete_time:
+            # print(np.squeeze(hazards.detach().cpu().numpy()).shape)
             pt_dict = {
                 'case_id': case_id, 
                 'risk': risk, 
                 'time': event_time.detach().cpu().numpy(), 
                 'event': event.detach().cpu().numpy(),
                 "hazards": np.squeeze(hazards.detach().cpu().numpy()),
-                "attention_weights": all_attentions
+                # "attention_weights": all_attentions
             }
             
             patient_results.update({case_id.item(): pt_dict})
@@ -338,7 +340,7 @@ def loop_survival(
         loss_value = loss.item()
         
         loss_surv += loss_value
-        if "path" in mode and batch_idx % 100 == 0:
+        if mode != "tab" and batch_idx % 100 == 0:
             print('batch {}, loss: {:.2f}, event: {}, event_time: {:.2f}, risk: {:.2f}, bag_size: {}'.format(batch_idx, loss_value, event.detach().cpu().item(), float(event_time.detach().cpu().item()), float(risk), data_WSI.size(0)))
         
         if training:
@@ -382,7 +384,7 @@ def loop_survival(
         df["event"] = all_events
         df["risk"] = all_risk_scores
         df["ids"] = all_ids
-        df["attention_weights"] = all_attentions
+        # df["attention_weights"] = all_attentions
         if discrete_time:
             hazards = np.squeeze(hazards.detach().cpu().numpy())
             for c in range(len(hazards)):

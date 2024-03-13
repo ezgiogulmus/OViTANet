@@ -193,7 +193,7 @@ def nth(iterator, n, default=None):
 
 def save_splits(split_datasets, column_keys, filename, boolean_style=False):
 	splits = [split_datasets[i].slide_data['slide_id'] for i in range(len(split_datasets))]
-	[split_datasets[i].slide_data.to_csv(f"/home/ezgitwo/Desktop/sil{i}.csv") for i in range(len(split_datasets))]
+	# [split_datasets[i].slide_data.to_csv(f"/home/ezgitwo/Desktop/sil{i}.csv") for i in range(len(split_datasets))]
 	if not boolean_style:
 		df = pd.concat(splits, ignore_index=True, axis=1)
 		df.columns = column_keys

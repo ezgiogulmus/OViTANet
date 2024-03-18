@@ -666,7 +666,7 @@ class WholeSlideImage(object):
         print('top_left: ', top_left, 'bot_right: ', bot_right)
         print('w: {}, h: {}'.format(w, h))
         print('scaled patch size: ', patch_size)
-
+        print(scores.shape, coords.shape)
         ###### normalize filtered scores ######
         if convert_to_percentiles:
             scores = to_percentiles(scores) 

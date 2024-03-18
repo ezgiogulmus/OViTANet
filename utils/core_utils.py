@@ -108,7 +108,7 @@ def init_model(args, ckpt_path=None):
     else:
         raise NotImplementedError
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=5, verbose=True, min_lr=1e-7)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=3, verbose=True, min_lr=1e-7)
 
     if args.surv_model == "cont":
         loss_fn = CoxSurvLoss(device)
@@ -346,7 +346,8 @@ def loop_survival(
         if training:
             loss = loss / gc
             loss.backward()
-            if (batch_idx + 1) % gc == 0: 
+            if (batch_idx + 1) % gc == 0:
+                nn.utils.clip_grad_norm_(model.parameters(), 1.0) 
                 optimizer.step()
                 optimizer.zero_grad()
 

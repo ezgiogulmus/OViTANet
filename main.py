@@ -179,22 +179,22 @@ def setup_argparse():
 
 	parser.add_argument('--target_dim', type=int, default=50)
 
-	parser.add_argument("--mlp_type", default="small", choices=["tiny", "small", "big"])
+	parser.add_argument("--mlp_type", default="big", choices=["tiny", "small", "big"])
 	parser.add_argument("--activation", default="relu", choices=["relu", "leakyrelu", "gelu"])
 	parser.add_argument("--mlp_skip", default=True, action="store_false")
-	parser.add_argument("--mlp_depth", default=5, type=int)
+	parser.add_argument("--mlp_depth", default=7, type=int)
 
 	parser.add_argument("--depth", default=5, type=int)
-	parser.add_argument("--mha_heads", default=6, type=int)
-	parser.add_argument("--model_dim", default=256, help="to decrease nb of patch features")
+	parser.add_argument("--mha_heads", default=4, type=int)
+	parser.add_argument("--model_dim", default=None, help="to decrease nb of patch features")
 	parser.add_argument("--mlp_dim", default=64, type=int, help="Hidden dim during FeedForward")
-	parser.add_argument("--dim_head", default=64, type=int, help="inner_dim = dim_head * heads")
+	parser.add_argument("--dim_head", default=32, type=int, help="inner_dim = dim_head * heads")
 	parser.add_argument("--pool", default="cls", choices=["cls", "mean"])
 
 	### Optimizer Parameters + Survival Loss Function
 	parser.add_argument('--opt',             type=str, choices = ['adam', 'sgd'], default='adam')
 	parser.add_argument('--batch_size',      type=int, default=1, help='Batch Size (Default: 1, due to varying bag sizes)')
-	parser.add_argument('--gc',              type=int, default=256, help='Gradient Accumulation Step during training (Gradients are calculated for every 256 patients)')
+	parser.add_argument('--gc',              type=int, default=64, help='Gradient Accumulation Step during training (Gradients are calculated for every 256 patients)')
 	parser.add_argument('--max_epochs',      type=int, default=30, help='Maximum number of epochs to train')
 	
 	parser.add_argument('--lr',				 type=float, default=0.001, help='Learning rate')
@@ -265,22 +265,21 @@ if __name__ == "__main__":
 		
 		parameter_dict = {
 			"opt": {
-				"values": ["sgd", "adam"]
-				# "value": "adam"
+				# "values": ["sgd", "adam"]
+				"value": "adam"
 			},
 			"lr":{
-				"values": [1e-5, 1e-4, 1e-3]
-				# "value": 1e-3
+				# "values": [1e-5, 1e-4, 1e-3]
+				"value": 1e-3
 			},
 			"reg":{
 				"values": [1e-2, 1e-4, 1e-3]
 			},
-			'drop_out': {
-				"values": [.25, .50, .75]
-			},
-			
+			# 'drop_out': {
+			# 	"values": [.25, .50, .75]
+			# },
 			"gc": {
-				"value": 1
+				"values": [32, 64, 128]
 			},
 			
 		}
@@ -296,14 +295,14 @@ if __name__ == "__main__":
 					"values": [4, 6]
 				},
 				'dim_head': {
-					"values": [16, 64]
-				}
-			})
-		else:
-			parameter_dict.update({
-				"mlp_type": {
-					"values": ["tiny", "small", "big"]
+					"values": [16, 32]
 				},
+		# 	})
+		# else:
+		# 	parameter_dict.update({
+				# "mlp_type": {
+				# 	"values": ["small", "big"]
+				# },
 				"activation": {
 					"values": ["relu", "leakyrelu", "gelu"]
 				},

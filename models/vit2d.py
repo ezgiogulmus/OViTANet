@@ -27,6 +27,79 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
+# class Attention(nn.Module):
+#     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0., augmented_dim=128):
+#         super().__init__()
+#         self.img_gate = nn.Sequential(
+#             # nn.Linear(dim, augmented_dim),
+#             # nn.ReLU(),
+#             # nn.Linear(augmented_dim, dim),
+#             nn.Tanh(),
+#             nn.LayerNorm(dim)
+#         )
+        
+#         self.tab_gate = nn.Sequential(
+#             # nn.Linear(dim, augmented_dim),
+#             # nn.ReLU(),
+#             # nn.Linear(augmented_dim, dim),
+#             nn.Sigmoid(),
+#             nn.LayerNorm(dim)
+#         )
+#         inner_dim = dim_head *  heads
+#         project_out = not (heads == 1 and dim_head == dim)
+
+#         self.heads = heads
+#         self.scale = dim_head ** -0.5
+#         self.dim_head = dim_head
+
+#         # self.norm = nn.LayerNorm(dim)
+
+#         self.attend = nn.Softmax(dim = -1)
+#         self.dropout = nn.Dropout(dropout)
+
+#         self.img_to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
+#         self.tab_to_kv = nn.Linear(dim, inner_dim * 2, bias = False)
+
+#         self.to_out = nn.Sequential(
+#             nn.Linear(inner_dim, dim),
+#             nn.Dropout(dropout)
+#         ) if project_out else nn.Identity()
+
+#     def forward(self, img, tab=None, return_weights=False):
+#         img = self.img_gate(img)
+
+#         qkv = self.img_to_qkv(img).chunk(3, dim = -1)
+#         # print("QKV", qkv[0].shape)
+#         b, n = qkv[0].size(0), qkv[0].size(1)
+#         q, k, v = map(lambda t: t.view(b, n, self.heads, self.dim_head).transpose(1, 2), qkv)
+        
+#         if tab is not None:
+#             tab = self.tab_gate(tab)
+#             kv_tab = self.tab_to_kv(tab).chunk(2, dim = -1)
+#             k_tab, v_tab = map(lambda t: t.view(b, 1, self.heads, self.dim_head).transpose(1, 2), kv_tab)
+#             k = torch.cat([k, k_tab], dim=2)
+#             v = torch.cat([v, v_tab], dim=2)
+#             # k = torch.cat([self.img_scale * k, self.tab_scale * k_tab], dim=2)
+#             # v = torch.cat([self.img_scale * v, self.tab_scale * v_tab], dim=2)
+    
+#         # print("k", k.shape, k.mean(), k.max()) # (1, H, nb_patches+1, dim_head)
+#         # print("q", q.shape, q.mean(), q.max())
+#         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+#         # print("dots", dots.shape, dots.mean(), dots.max())
+#         attn = self.attend(dots)
+        
+#         # dropped_attn = self.dropout(attn)
+#         # print("d", dots.shape, attn.shape, v.shape) # (1, H, nb_patches+1,  nb_patches+1)
+#         out = torch.matmul(attn, v)
+#         # print(out.shape) # (1, H, nb_patches+1, dim_head)
+#         out = out.transpose(1, 2).reshape(b, n, self.heads * self.dim_head)
+        
+#         out = self.to_out(out)
+#         if not return_weights:
+#             return out
+#         return out, attn#.transpose(1, 2).reshape(b, n, -1)
+
+
 class Attention(nn.Module):
     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
         super().__init__()
@@ -77,7 +150,7 @@ class Attention(nn.Module):
         out = self.to_out(out)
         if not return_weights:
             return out
-        return out, attn#.transpose(1, 2).reshape(b, n, -1)
+        return out, attn
 
 
 class Transformer(nn.Module):
@@ -89,6 +162,7 @@ class Transformer(nn.Module):
             self.img_weights = nn.Parameter(torch.ones(dim))
         self.norm = nn.LayerNorm(dim)
         self.layers = nn.ModuleList([])
+        
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 Attention(dim, heads = heads, dim_head = dim_head, dropout = dropout),
@@ -96,27 +170,28 @@ class Transformer(nn.Module):
             ]))
 
     def forward(self, x, tab=None):
-        for i, (attn, ff) in enumerate(self.layers):
-            if self.mm_fusion == "crossatt" and i == len(self.layers) - 1:
-                att_out, attn_weights = attn(x, tab=tab, return_weights=True)
-                # else:
-                #     att_out = attn(x, tab=tab)
-                x = att_out + x
-            else:
-                if i == len(self.layers) - 1:
-                    if self.mm_fusion == "concat":
-                        x = torch.cat([x, tab], dim=1)
-                    elif self.mm_fusion == "adaptive":
-                        x = tab * self.tab_weights + self.img_weights * x
-                    elif self.mm_fusion == "multiply":
-                        x = torch.mul(tab, x)
+        attn_weights = None 
+        return_weights = False 
+        for i, (attn, ff) in enumerate(self.layers):            
+            if i == len(self.layers) - 1:
+                return_weights = True
+                
+                if self.mm_fusion == "concat":
+                    x = torch.cat([x, tab], dim=1)
+                elif self.mm_fusion == "adaptive":
+                    x = tab * self.tab_weights + self.img_weights * x
+                elif self.mm_fusion == "multiply":
+                    x = torch.mul(tab, x)
                     
-                    att_out, attn_weights = attn(x, return_weights=True)
-                else:
-                    att_out = attn(x)
-                x = att_out + x
+                att_out = attn(x, tab=tab if self.mm_fusion =="crossatt" else None, return_weights=return_weights)
+            else:
+                att_out = attn(x, tab=None, return_weights=return_weights)
+            
+            if len(att_out) == 2:
+                att_out, attn_weights = att_out
+                # print("ATTN", attn_weights.shape,  attn_weights.mean(), attn_weights.max())
+            x = att_out + x
             x = ff(x) + x
-
         return self.norm(x), attn_weights
 
 
@@ -177,13 +252,13 @@ class ViT(nn.Module):
                     target_features *= 2
 
         self.mlp_head = nn.Sequential(
-            nn.ReLU(),
-            nn.Dropout(drop_out),
+            # nn.ReLU(),
+            # nn.Dropout(drop_out),
             nn.Linear(target_features, n_classes)
         )
         initialize_weights(self)
 
-    def forward(self, return_weights=False, **kwargs):
+    def forward(self, **kwargs):
         x = kwargs['x_path']
         if self.fc:
             x = self.fc(x)

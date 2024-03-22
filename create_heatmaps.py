@@ -318,7 +318,7 @@ if __name__ == '__main__':
         
         if not os.path.isfile(save_path):
             print('heatmap {} not found'.format(save_path))
-            if heatmap_args.use_roi:
+            if args.use_roi:
                 save_path_full = os.path.join(r_slide_save_dir, '{}_{}_roi_False.h5'.format(slide_id, patch_args.overlap))
                 print('found heatmap for whole slide')
                 save_path = save_path_full

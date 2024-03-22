@@ -233,6 +233,7 @@ if __name__ == "__main__":
 		data_root_dir = args.data_root_dir
 		wandb = args.wandb
 		cv_fold = args.k
+		max_epochs = args.max_epochs
 		with open(args.run_config_file, "r") as f:
 			config = json.load(f)
 		
@@ -247,6 +248,7 @@ if __name__ == "__main__":
 		args.results_dir = results_dir
 		args.wandb = wandb
 		args.k = cv_fold
+		args.max_epochs = max_epochs
 		args.split_dir = args.split_dir.split("/")[-1]
 		start = timer()
 		results = main(args)
@@ -269,15 +271,15 @@ if __name__ == "__main__":
 				"value": "adam"
 			},
 			"lr":{
-				# "values": [1e-5, 1e-4, 1e-3]
-				"value": 1e-3
+				"values": [1e-5, 1e-4, 1e-3]
+				# "value": 1e-3
 			},
 			"reg":{
 				"values": [1e-2, 1e-4, 1e-3]
 			},
-			# 'drop_out': {
-			# 	"values": [.25, .50, .75]
-			# },
+			'drop_out': {
+				"values": [.25, .50, .75]
+			},
 			"gc": {
 				"values": [32, 64, 128]
 			},

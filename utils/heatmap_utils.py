@@ -160,21 +160,23 @@ def compute_from_patches(wsi_object, tab_features, model=None, feature_extractor
 			if fe_type == "SSL":
 				features = features.last_hidden_state[:, 0, :]
 
-			
 			_, _, A = model(x_path=features, x_tabular=tab_features, return_feats=True)
 			A_scores = torch.mean(A[0], dim=0).cpu().numpy()
 			# A_scores: num_patches+1, num_patches+2
 			A_scores = A_scores[0] # cls token
 			# print(A_scores.shape)
 			if tab_features is not None:
-				A_scores_patches = A_scores[:-1]
+				A_scores_patches = A_scores[1:-1]
+				# print("A", A_scores_patches.shape, A_scores_patches.mean(), A_scores_patches.max())
 				A_scores_tab = A_scores[-1]
 			else:
 				A_scores_patches = A_scores
 				A_scores_tab = None
-			A_scores_patches /= A_scores_patches.max()
+			# A_scores_patches /= A_scores_patches.max()
+			# print("A_norm", A_scores_patches.shape, A_scores_patches.mean(), A_scores_patches.max())
 			if ref_scores is not None:
 				for score_idx in range(len(A_scores_patches)):
+					# print("score_idx", score_idx, A_scores_patches[score_idx], np.squeeze(ref_scores), score2percentile(A_scores_patches[score_idx], np.squeeze(ref_scores)))
 					A_scores_patches[score_idx] = score2percentile(A_scores_patches[score_idx], np.squeeze(ref_scores))
 			A_list.extend(A_scores_patches)
 			coords_list.extend(coords)
@@ -201,19 +203,19 @@ def get_attention_scores(model, img_features, tab_features):
 		A_scores = A_scores[0] # cls token
 		# print(A_scores.shape)
 		if tab_features is not None:
-			A_scores_patches = A_scores[:-1]
+			A_scores_patches = A_scores[1:-1]
 			A_scores_tab = A_scores[-1]
 		else:
 			A_scores_patches = A_scores
 			A_scores_tab = None
 
-		A_scores_patches /= A_scores_patches.max()
+		# A_scores_patches /= A_scores_patches.max()
 		# print(A_scores_patches.shape, A_scores_patches.max(), A_scores_patches.min())
 		hazards = torch.sigmoid(logits)
 		S = torch.cumprod(1 - hazards, dim=1)
 		
 		indices = (S < 0.5).nonzero()
-		y_pred = indices[0][-1].item() if len(indices) > 0 else len(S)
+		y_pred = indices[0][0].item() if len(indices) > 0 else len(S[0])
 	return A_scores_patches, y_pred, hazards[0].cpu().numpy()
 
 def drawHeatmap(scores, coords, slide_path=None, wsi_object=None, vis_level = -1, **kwargs):

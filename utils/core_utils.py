@@ -264,6 +264,14 @@ def loop_survival(
             # print(data_WSI.shape)
         data_WSI = data_WSI.to(device) if mode != "tab" else None
         data_tab = data_tab.to(device) if "tab" in mode else None
+        # if torch.isnan(data_tab).any():
+        #     print("NaN values in tabular features")
+        #     print(data_tab)
+        #     exit(1)
+        # if torch.isinf(data_tab).any():
+        #     print("Inf values in tabular features")
+        #     print(data_tab)
+        #     exit(1)
         
         y_disc = y_disc.to(device)
         event_time = event_time.to(device)

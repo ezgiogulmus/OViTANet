@@ -43,6 +43,8 @@ def main(eval_args):
 		parser.add_argument('--' + k, default=v, type=type(v))
 	
 	args = parser.parse_args()
+	
+	survival_time_list = pd.read_csv(config["csv_path"])["survival_months"].values
 	# assert args.nb_tabular_data < 2, "Tabular data integration is not implemented other than age-only scenerio."
 	tabular_cols = []
 	if args.nb_tabular_data > 0:
@@ -77,7 +79,8 @@ def main(eval_args):
 		mode= args.mode,
 		print_info = True,
 		n_bins=args.n_classes,
-		indep_vars=tabular_cols
+		indep_vars=tabular_cols,
+		survival_time_list=survival_time_list
 	)
 
 	print("################# Settings ###################")

@@ -199,7 +199,7 @@ def setup_argparse():
 	
 	parser.add_argument('--lr',				 type=float, default=0.001, help='Learning rate')
 	parser.add_argument('--train_fraction',      type=float, default=.5, help='fraction of training patches')
-	parser.add_argument('--reg', 			 type=float, default=0.001, help='L2-regularization weight decay')
+	parser.add_argument('--reg', 			 type=float, default=0.01, help='L2-regularization weight decay')
 	
 	parser.add_argument('--weighted_sample', action='store_true', default=False, help='Enable weighted sampling')
 	parser.add_argument('--early_stopping',  default=10, type=int, help='Enable early stopping')
@@ -277,18 +277,19 @@ if __name__ == "__main__":
 			"reg":{
 				"values": [1e-2, 1e-4, 1e-3]
 			},
-			'drop_out': {
-				"values": [.25, .50, .75]
-			},
-			"gc": {
-				"values": [32, 64, 128]
-			},
+			# 'drop_out': {
+			# 	"values": [.25, .50, .75]
+			# },
+			# "gc": {
+			# 	"values": [32, 64, 128]
+			# },
 			
-		}
-		if "SSL" in args.run_name:
-			parameter_dict.update({
+		# }
+		# if args.data_root_dir is not None:
+		# 	parameter_dict.update({
 				'model_dim': {
-					"values": [None, 128, 256]
+					# "values": [None, 128, 256]
+					'value': None
 				},
 				'depth': {
 					"values": [3, 5]
@@ -302,16 +303,16 @@ if __name__ == "__main__":
 		# 	})
 		# else:
 		# 	parameter_dict.update({
-				# "mlp_type": {
-				# 	"values": ["small", "big"]
-				# },
-				"activation": {
-					"values": ["relu", "leakyrelu", "gelu"]
+				"mlp_type": {
+					"values": ["tiny", "big"]
 				},
-				"mlp_depth": {
-					"values": [3, 5, 7]
-				}
-			})
+				# "activation": {
+				# 	"values": ["relu", "leakyrelu", "gelu"]
+				# },
+				# "mlp_depth": {
+				# 	"values": [3, 5, 7]
+				# }
+			}
 		sweep_config = {
 			'method': 'random',
 			'metric': {

@@ -201,7 +201,7 @@ class ViT(nn.Module):
         mm_fusion_type="late", n_classes=4, path_input_dim=768, 
         target_features=50, depth=5, mha_heads=4, 
         model_dim=None, mlp_dim=64, pool = 'cls', dim_head = 16, 
-        drop_out = 0.2, emb_dropout = 0.5, **kwargs
+        drop_out = 0.2, emb_dropout = 0.5, mlp_type="tiny", **kwargs
         ):
         super().__init__()
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
@@ -228,12 +228,16 @@ class ViT(nn.Module):
         target_tab_features = target_features if self.mm_fusion_type == "late" else self.model_dim
 
         if nb_tabular_data > 0:
-            self.tabular_emb = MLP(
-                nb_tabular_data, 
-                drop_out=drop_out,
-                target_features=target_tab_features, 
-                feat_extractor=True,
-                **kwargs)
+            if mlp_type == "tiny":
+                self.tabular_emb = nn.Linear(nb_tabular_data, target_tab_features)
+            else:
+                self.tabular_emb = MLP(
+                    nb_tabular_data, 
+                    drop_out=drop_out,
+                    target_features=target_tab_features, 
+                    feat_extractor=True,
+                    mlp_type=mlp_type,
+                    **kwargs)
 
         self.transformer = Transformer(self.model_dim, depth, mha_heads, dim_head, mlp_dim, drop_out, mm_fusion=None if self.mm_fusion_type != "mid" else mm_fusion)
         self.to_feats = nn.Linear(self.model_dim, target_features)

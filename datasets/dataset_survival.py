@@ -32,8 +32,8 @@ class Generic_WSI_Survival_Dataset(Dataset):
 		self.mode = mode
 		
 		self.indep_vars = indep_vars
-		
-		print("Number of selected tabular data: ", len(self.indep_vars))
+		if self.print_info:
+			print("Number of selected tabular data: ", len(self.indep_vars))
 		
 		slide_data = df[["case_id", "slide_id", "survival_months", "event", "group"]+self.indep_vars]
 		
@@ -44,7 +44,8 @@ class Generic_WSI_Survival_Dataset(Dataset):
 		time_breaks[0] = 0
 		time_breaks[-1] += 1
 		self.time_breaks = time_breaks
-		print("Time intervals: ", self.time_breaks)
+		if self.print_info:
+			print("Time intervals: ", self.time_breaks)
 
 		self.patient_dict = {
 			case: slide_data["slide_id"][slide_data["case_id"] == case].values \
@@ -99,19 +100,18 @@ class Generic_WSI_Survival_Dataset(Dataset):
 
 	def get_split_from_df(self, all_splits=None, split_key='train', scaler=None):
 		if split_key == 'all':
-			return Generic_Split(self.slide_data, self.time_breaks, self.indep_vars, self.mode, self.data_dir, patient_dict=self.patient_dict)
+			return Generic_Split(self.slide_data, self.time_breaks, self.indep_vars, self.mode, self.data_dir, patient_dict=self.patient_dict, print_info=self.print_info)
 		split = all_splits[split_key]
 		split = split.dropna().reset_index(drop=True)
 
 		if len(split) > 0:
 			mask = self.slide_data['slide_id'].isin(split.tolist())
 			df_slice = self.slide_data[mask].reset_index(drop=True)
-			split = Generic_Split(df_slice, self.time_breaks, self.indep_vars, self.mode, self.data_dir, patient_dict=self.patient_dict)
+			split = Generic_Split(df_slice, self.time_breaks, self.indep_vars, self.mode, self.data_dir, patient_dict=self.patient_dict, print_info=self.print_info)
 		else:
 			split = None
 		
 		return split
-
 
 	def return_splits(self, csv_path=None, return_all=False, stats_path=None):
 		
@@ -120,7 +120,8 @@ class Generic_WSI_Survival_Dataset(Dataset):
 			if len(self.indep_vars) > 0:
 				train_stats = pd.read_csv(stats_path)
 				train_stats.set_index("Unnamed: 0", inplace=True)
-				test_split.preprocess(train_stats)
+				assert "mean" in train_stats.columns and "std" in train_stats.columns
+				test_split.preprocess(train_stats, use_csv=True)
 			return test_split
 		all_splits = pd.read_csv(csv_path)
 		train_split = self.get_split_from_df(all_splits=all_splits, split_key='train')
@@ -129,9 +130,9 @@ class Generic_WSI_Survival_Dataset(Dataset):
 
 		train_stats = train_split.get_stats()
 	
-		train_split.preprocess(train_stats)
-		val_split.preprocess(train_stats)
-		test_split.preprocess(train_stats)
+		sc = train_split.preprocess(train_stats)
+		val_split.preprocess(train_stats, sc=sc)
+		test_split.preprocess(train_stats, sc=sc)
 		return (train_split, val_split, test_split), train_stats
 
 	def __getitem__(self, idx):
@@ -191,7 +192,7 @@ class MIL_Survival_Dataset(Generic_WSI_Survival_Dataset):
 
 class Generic_Split(MIL_Survival_Dataset):
 	def __init__(self, slide_data, time_breaks, indep_vars,
-	mode, data_dir=None, patient_dict=None):
+	mode, data_dir=None, patient_dict=None, print_info=False):
 		"""
 		Args:
 			slide_data (DataFrame): Data for the current split.
@@ -203,6 +204,7 @@ class Generic_Split(MIL_Survival_Dataset):
 		self.data_dir = data_dir
 		self.patient_dict = patient_dict
 		self.time_breaks = time_breaks
+		self.print_info = print_info
 		
 		self.mode = mode
 		self.indep_vars = indep_vars
@@ -210,25 +212,17 @@ class Generic_Split(MIL_Survival_Dataset):
 	def __len__(self):
 		return len(self.slide_data)
 
-	# def get_stats(self):
-	# 	median_vals = self.slide_data[self.indep_vars].median()
-	# 	mean_vals = self.slide_data[self.indep_vars].mean()
-	# 	std_vals = self.slide_data[self.indep_vars].std()
-	# 	std_vals[std_vals == 0] = 1
-	# 	assert 0 not in std_vals.values, "There are still 0 values in the standard deviation."
-	# 	stats = pd.concat([median_vals, mean_vals, std_vals], axis=1)
-	# 	stats.columns = ['median', 'mean', 'std']
-	# 	return stats
 	def get_stats(self):
 		median_vals = self.slide_data[self.indep_vars].median()
-		min_vals = self.slide_data[self.indep_vars].min()
-		max_vals = self.slide_data[self.indep_vars].max()
-		
-		stats = pd.concat([median_vals, min_vals, max_vals], axis=1)
-		stats.columns = ['median', 'min', 'max']
+		mean_vals = self.slide_data[self.indep_vars].mean()
+		std_vals = self.slide_data[self.indep_vars].std()
+		std_vals[std_vals == 0] = 1
+		assert 0 not in std_vals.values, "There are still 0 values in the standard deviation."
+		stats = pd.concat([median_vals, mean_vals, std_vals], axis=1)
+		stats.columns = ['median', 'mean', 'std']
 		return stats
 
-	def preprocess(self, stats):
+	def preprocess(self, stats, sc=None, use_csv=False):
 		if len(self.indep_vars) > 0:
 			print("Filling missing values with train medians:")
 			for col_idx, col in enumerate(self.indep_vars):
@@ -236,16 +230,21 @@ class Generic_Split(MIL_Survival_Dataset):
 					print("\tProcessing:", col_idx, "/", len(self.indep_vars))
 				if self.slide_data[col].isna().any():
 					self.slide_data[col] = self.slide_data[col].fillna(stats["median"].loc[col])
-			# print("Z-score normalization with train mean and std")
-			# for col_idx, col in enumerate(self.indep_vars):
-			# 	self.slide_data[col] = (self.slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
-			print("MinMax normalization with train min and max")
-			for col_idx, col in enumerate(self.indep_vars):
-				denominator = (stats["max"].loc[col] - stats["min"].loc[col])
-				if denominator == 0:
-					denominator = 1
-				self.slide_data[col] = (self.slide_data[col] - stats["min"].loc[col]) / denominator
-				
+			print("Z-score normalization with train mean and std")
+			if sc == None and not use_csv:
+				sc = StandardScaler()
+				self.slide_data[self.indep_vars] = sc.fit_transform(self.slide_data[self.indep_vars])
+				print(self.slide_data[self.indep_vars].max().max(), self.slide_data[self.indep_vars].min().min())
+				return sc
+			elif sc == None and use_csv:
+				for col_idx, col in enumerate(self.indep_vars):
+					mean_val = float(stats["mean"].loc[col])
+					std_val = float(stats["std"].loc[col]) #if float(stats["std"].loc[col]) > 1e-6 else 1
+					self.slide_data[col] = (self.slide_data[col] - mean_val) / std_val
+			else:
+				self.slide_data[self.indep_vars] = sc.transform(self.slide_data[self.indep_vars])
+			
+				# self.slide_data[col] = (self.slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
 			print(self.slide_data[self.indep_vars].max().max(), self.slide_data[self.indep_vars].min().min())
 		assert self.slide_data.isna().sum().sum() == 0, "There are still NaN values in the data."
 	

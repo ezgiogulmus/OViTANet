@@ -34,7 +34,7 @@ class MLP(nn.Module):
         assert activation in self.activations.keys(), "Unknown activation function."
 
         # Define sizes based on model type
-        if input_dim < 100:
+        if input_dim < 100 or mlp_type=="tiny":
             self.skip = False
             self.blocks = nn.ModuleList([MLPBlock(input_dim, 256, self.activations[activation], drop_out, bn=batch_norm)])
             sizes = [256]

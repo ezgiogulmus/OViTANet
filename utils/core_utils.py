@@ -159,8 +159,8 @@ def train(datasets: tuple, cur: int, args: Namespace):
     else:
         early_stopping = None
 
-    window_size=1000 if args.model_type=="vit" else None
-    # window_size = None
+    # window_size=1000 if args.model_type=="vit" else None
+    window_size = None
 
     for epoch in range(args.max_epochs):
         print('Epoch: {}/{}'.format(epoch, args.max_epochs))
@@ -171,7 +171,8 @@ def train(datasets: tuple, cur: int, args: Namespace):
 
     if os.path.isfile(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))):
         model.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
-
+    else:
+        torch.save(model.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
     results_val_dict, val_cindex, val_auc, val_ibs, val_loss = loop_survival(cur, model, val_loader, epoch, loss_fn=loss_fn, window_size=window_size, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals)
     print('Val loss: {:4f} | c-Index: {:.4f} | mean AUC: {:.4f} | mean IBS: {:.4f}'.format(val_loss, val_cindex, val_auc, val_ibs))
     log = {
@@ -191,15 +192,22 @@ def train(datasets: tuple, cur: int, args: Namespace):
             "test_ibs": test_ibs,
         })
     else:
+        print("Starting bootstraps", end=" ")
+        if args.early_stopping > 0:
+            print("on test set")
+            target_split = test_split
+        else: 
+            print("on val set")
+            target_split = val_split
         results_test_dict = None
-        print("Starting Bootstraps:")
+        
         n_bootstrap=1000
 
         bs_cindex, bs_loss = [], []
         for i in range(n_bootstrap):
             if i % 100 == 0 and i !=0:
                 print("\t", i, "/", n_bootstrap)
-            bs_loader = DataLoader(test_split, batch_size=args.batch_size, sampler = RandomSampler(test_split, replacement=True), collate_fn = collate_MIL_survival)
+            bs_loader = DataLoader(target_split, batch_size=args.batch_size, sampler = RandomSampler(target_split, replacement=True), collate_fn = collate_MIL_survival)
             _, test_cindex, _, _, test_loss = loop_survival(cur=None, model=model, loader=bs_loader, loss_fn=loss_fn, window_size=window_size, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals, cidx_only=True)
             
             bs_cindex.append(test_cindex)
@@ -278,39 +286,16 @@ def loop_survival(
         event = event.to(device)
         
         with torch.set_grad_enabled(training):
-            if window_size and mode != "tab":
-                nb_patch, nb_feats = data_WSI.shape
-                slide_h = []
-                if return_feats or return_summary:
-                    slide_feats, slide_atts = [], []
-                for i in range(0, nb_patch, 1000):
-                    batch_of_feats = data_WSI[i:i+1000]
-                    batch_h = model(x_path=batch_of_feats, x_tabular=data_tab, return_feats=return_feats or return_summary)
-                    if return_feats or return_summary:
-                        slide_h.append(batch_h[0])
-                        slide_feats.append(batch_h[1])
-                        
-                        slide_atts.append(batch_h[2].reshape(1, batch_h[2].shape[1], -1))
-                    else:
-                        slide_h.append(batch_h)
-                logits = torch.mean(torch.stack(slide_h), 0)
-                if return_feats or return_summary:
-                    feats = torch.mean(torch.stack(slide_feats), 0)
-                    # atts = torch.concatenate(slide_atts, -1)
-                    all_features.append(feats.detach().cpu().numpy())
-                    # all_attentions.append(atts.detach().cpu().numpy())
+            if mode == "tab":
+                logits = model(data_tab)
             else:
-                if mode == "tab":
-                    logits = model(data_tab)
-                else:
-                    out = model(x_path=data_WSI, x_tabular=data_tab, return_feats=return_feats or return_summary)
+                out = model(x_path=data_WSI, x_tabular=data_tab, return_feats=return_feats or return_summary)
 
-                    if return_feats or return_summary:
-                        logits, feats, atts = out
-                        all_features.append(feats.detach().cpu().numpy())
-                        # all_attentions.append(atts.detach().cpu().numpy())
-                    else:
-                        logits = out
+                if return_feats or return_summary:
+                    logits, feats, atts = out
+                    all_features.append(feats.detach().cpu().numpy())
+                else:
+                    logits = out
 
         if discrete_time:
             hazards = torch.sigmoid(logits)
@@ -336,7 +321,6 @@ def loop_survival(
                 'time': event_time.detach().cpu().numpy(), 
                 'event': event.detach().cpu().numpy(),
                 "hazards": np.squeeze(hazards.detach().cpu().numpy()),
-                # "attention_weights": all_attentions
             }
             
             patient_results.update({case_id.item(): pt_dict})
@@ -388,12 +372,14 @@ def loop_survival(
     
     if return_feats:
         assert os.path.isdir(results_dir)
-        df = pd.DataFrame(np.concatenate(all_features), columns=[f"feat{i}" for i in range(np.concatenate(all_features).shape[1])])
+        df = pd.DataFrame()
+        if len(all_features) > 0:
+            df = pd.DataFrame(np.concatenate(all_features), columns=[f"feat{i}" for i in range(np.concatenate(all_features).shape[1])])
         df["time"] = all_event_times
         df["event"] = all_events
         df["risk"] = all_risk_scores
         df["ids"] = all_ids
-        # df["attention_weights"] = all_attentions
+        
         if discrete_time:
             hazards = np.squeeze(hazards.detach().cpu().numpy())
             for c in range(len(hazards)):
@@ -431,7 +417,7 @@ def loop_survival(
     return False
 
 
-def eval_model(dataset, results_dir, args: Namespace):
+def eval_model(dataset, results_dir, args: Namespace, return_feats=True):
     """   
         eval for a single fold
     """
@@ -444,8 +430,9 @@ def eval_model(dataset, results_dir, args: Namespace):
     test_loader = get_split_loader(dataset, batch_size=args.batch_size)
     print('Done!')
     
-    window_size=1000 if args.model_type=="vit" else None
-    cindex, _, _, loss = loop_survival(args.cv, model, test_loader, loss_fn=loss_fn, window_size=window_size, results_dir=results_dir, return_feats=True, dataname=args.dataname, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode,cidx_only=True)
+    # window_size=1000 if args.model_type=="vit" else None
+    window_size=None
+    cindex, _, _, loss = loop_survival(args.cv, model, test_loader, loss_fn=loss_fn, window_size=window_size, results_dir=results_dir, return_feats=return_feats, dataname=args.dataname, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode,cidx_only=True)
     
     print("Test c-Index: {:4f} | loss: {:4f}".format(cindex, loss))
     return {

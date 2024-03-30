@@ -147,15 +147,15 @@ class Generic_WSI_Survival_Dataset(Dataset):
 				if slide_data[col].isna().any():
 					slide_data[col] = slide_data[col].fillna(stats["median"].loc[col])
 
-		print("MinMax normalization with train min and max")
-		# print("Z-score normalization with train mean and std")
+		# print("MinMax normalization with train min and max")
+		print("Z-score normalization with train mean and std")
 		print("\tBefore: {:.2f} - {:.2f}" .format(slide_data[self.indep_vars].min().min(), slide_data[self.indep_vars].max().max()))
 		for col_idx, col in enumerate(self.indep_vars):
-			# slide_data[col] = (slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
-			denominator = (stats["max"].loc[col] - stats["min"].loc[col])
-			if denominator == 0:
-				denominator = 1
-			slide_data[col] = (slide_data[col] - stats["min"].loc[col]) / denominator
+			slide_data[col] = (slide_data[col] - stats["mean"].loc[col]) / stats["std"].loc[col]
+			# denominator = (stats["max"].loc[col] - stats["min"].loc[col])
+			# if denominator == 0:
+			# 	denominator = 1
+			# slide_data[col] = (slide_data[col] - stats["min"].loc[col]) / denominator
 		print("\tAfter: {:.2f} - {:.2f}" .format(slide_data[self.indep_vars].min().min(), slide_data[self.indep_vars].max().max()))
 		assert slide_data.isna().sum().sum() == 0, "There are still NaN values in the data."
 		return slide_data

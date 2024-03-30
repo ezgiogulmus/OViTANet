@@ -215,7 +215,7 @@ def get_attention_scores(model, img_features, tab_features):
 		S = torch.cumprod(1 - hazards, dim=1)
 		
 		indices = (S < 0.5).nonzero()
-		y_pred = indices[0][0].item() if len(indices) > 0 else len(S[0])
+		y_pred = indices[0][-1].item() if len(indices) > 0 else len(S[0])-1
 	return A_scores_patches, y_pred, hazards[0].cpu().numpy()
 
 def drawHeatmap(scores, coords, slide_path=None, wsi_object=None, vis_level = -1, **kwargs):

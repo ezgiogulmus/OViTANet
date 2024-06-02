@@ -12,6 +12,7 @@ from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc, i
 import torch
 from torch.utils.data import DataLoader, RandomSampler
 
+from models.surv_model import SurvMIL
 from models.vit2d import ViT
 from models.mlp_model import MLP
 from utils.utils import *
@@ -95,7 +96,12 @@ def init_model(args, ckpt_path=None):
             "dim_head": args.dim_head,
             "pool": args.pool
         })
-        model = ViT(**model_dict)
+        print(f"Initiating {args.model_type.upper()} model...")
+        if args.model_type == "vit":
+            model = ViT(**model_dict)
+        elif args.model_type == "ssm":
+            model = SurvMIL(**model_dict)
+        
     
     if ckpt_path:
         model.load_state_dict(torch.load(ckpt_path))
@@ -139,8 +145,7 @@ def train(datasets: tuple, cur: int, args: Namespace):
         time_intervals = list(train_split.time_breaks[1:-1])
         time_intervals.append(max_surv_limit)
 
-    else:
-        
+    else:  
         time_intervals = np.array(range(0, max_surv_limit, max_surv_limit//10))[1:]
     save_splits(datasets, ['train', 'val', "test"], os.path.join(args.results_dir, 'splits_{}.csv'.format(cur)))
     
@@ -159,21 +164,19 @@ def train(datasets: tuple, cur: int, args: Namespace):
     else:
         early_stopping = None
 
-    # window_size=1000 if args.model_type=="vit" else None
-    window_size = None
-
     for epoch in range(args.max_epochs):
         print('Epoch: {}/{}'.format(epoch, args.max_epochs))
-        loop_survival(cur, model, train_loader, epoch, optimizer=optimizer, writer=writer, loss_fn=loss_fn, gc=args.gc, window_size=window_size, training=True, discrete_time=True if args.surv_model == "discrete" else False, training_frac=args.train_fraction, mode=args.mode, time_intervals=time_intervals)
-        stop = loop_survival(cur, model, val_loader, epoch, scheduler=scheduler, early_stopping=early_stopping, writer=writer, loss_fn=loss_fn, window_size=window_size, results_dir=args.results_dir, training=False, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals)
+        loop_survival(cur, model, train_loader, epoch, optimizer=optimizer, writer=writer, loss_fn=loss_fn, gc=args.gc, training=True, discrete_time=True if args.surv_model == "discrete" else False, training_frac=args.train_fraction, mode=args.mode, time_intervals=time_intervals)
+        stop = loop_survival(cur, model, val_loader, epoch, scheduler=scheduler, early_stopping=early_stopping, writer=writer, loss_fn=loss_fn, results_dir=args.results_dir, training=False, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals)
         if stop:
             break
 
     if os.path.isfile(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))):
         model.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
     else:
+        "Saving the last model weights."
         torch.save(model.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
-    results_val_dict, val_cindex, val_auc, val_ibs, val_loss = loop_survival(cur, model, val_loader, epoch, loss_fn=loss_fn, window_size=window_size, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals)
+    results_val_dict, val_cindex, val_auc, val_ibs, val_loss = loop_survival(cur, model, val_loader, epoch, loss_fn=loss_fn, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals)
     print('Val loss: {:4f} | c-Index: {:.4f} | mean AUC: {:.4f} | mean IBS: {:.4f}'.format(val_loss, val_cindex, val_auc, val_ibs))
     log = {
         "val_loss": val_loss,
@@ -183,7 +186,7 @@ def train(datasets: tuple, cur: int, args: Namespace):
     }
     
     if not args.bootstrapping:
-        results_test_dict, test_cindex, test_auc, test_ibs, test_loss = loop_survival(cur, model, test_loader, epoch, loss_fn=loss_fn, window_size=window_size, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals)
+        results_test_dict, test_cindex, test_auc, test_ibs, test_loss = loop_survival(cur, model, test_loader, epoch, loss_fn=loss_fn, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals)
         print("Test loss: {:4f} | c-Index: {:4f} | mean AUC: {:.4f} | mean IBS: {:.4f}".format(test_loss, test_cindex, test_auc, test_ibs))
         log.update({
             "test_loss": test_loss,
@@ -208,7 +211,7 @@ def train(datasets: tuple, cur: int, args: Namespace):
             if i % 100 == 0 and i !=0:
                 print("\t", i, "/", n_bootstrap)
             bs_loader = DataLoader(target_split, batch_size=args.batch_size, sampler = RandomSampler(target_split, replacement=True), collate_fn = collate_MIL_survival)
-            _, test_cindex, _, _, test_loss = loop_survival(cur=None, model=model, loader=bs_loader, loss_fn=loss_fn, window_size=window_size, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals, cidx_only=True)
+            _, test_cindex, _, _, test_loss = loop_survival(cur=None, model=model, loader=bs_loader, loss_fn=loss_fn, return_summary=True, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode, train_survival=train_survival, time_intervals=time_intervals, cidx_only=True)
             
             bs_cindex.append(test_cindex)
             bs_loss.append(test_loss)
@@ -247,7 +250,7 @@ def train(datasets: tuple, cur: int, args: Namespace):
 def loop_survival(
     cur, model, loader, epoch=None, scheduler=None, optimizer=None,
     early_stopping=None, writer=None, loss_fn=None, gc=16,
-    window_size=None, results_dir=None, training=False, 
+    results_dir=None, training=False, 
     return_summary=False, return_feats=False, dataname=None,
     discrete_time=True, training_frac=1., mode="path+tab", 
     train_survival=None, time_intervals=None, cidx_only=False
@@ -267,20 +270,10 @@ def loop_survival(
         if training and training_frac < 1.:
             np.random.seed(7)
             random_ids = np.random.permutation(np.array(range(data_WSI.shape[0])))[:int(data_WSI.shape[0]*training_frac)]
-            # print(data_WSI.shape)
             data_WSI = data_WSI[random_ids]
-            # print(data_WSI.shape)
         data_WSI = data_WSI.to(device) if mode != "tab" else None
         data_tab = data_tab.to(device) if "tab" in mode else None
-        # if torch.isnan(data_tab).any():
-        #     print("NaN values in tabular features")
-        #     print(data_tab)
-        #     exit(1)
-        # if torch.isinf(data_tab).any():
-        #     print("Inf values in tabular features")
-        #     print(data_tab)
-        #     exit(1)
-        
+                
         y_disc = y_disc.to(device)
         event_time = event_time.to(device)
         event = event.to(device)
@@ -300,11 +293,10 @@ def loop_survival(
         if discrete_time:
             hazards = torch.sigmoid(logits)
             S = torch.cumprod(1 - hazards, dim=1)
-            
+            # print(hazards.shape, S.shape, event_time.shape, event.shape)
             all_surv_probs.append(S.detach().cpu().numpy())
             risk = -torch.mean(S, dim=1).detach().cpu().numpy()
         else:
-            
             y_pred = logits
             risk = y_pred.detach().cpu().numpy()
         
@@ -314,7 +306,6 @@ def loop_survival(
         all_risk_scores.append(risk)
         
         if return_summary and discrete_time:
-            # print(np.squeeze(hazards.detach().cpu().numpy()).shape)
             pt_dict = {
                 'case_id': case_id, 
                 'risk': risk, 
@@ -349,8 +340,6 @@ def loop_survival(
     all_risk_scores = np.concatenate(all_risk_scores)
     all_events = np.concatenate(all_events)
     all_event_times = np.concatenate(all_event_times)
-
-    # c_index_intervals = [concordance_index(all_event_times, all_surv_probs[:, i], all_events) for i in range(num_intervals)]
     
     c_index = concordance_index_censored(all_events.astype(bool), all_event_times, np.squeeze(all_risk_scores), tied_tol=1e-08)[0]
     if training or cidx_only:       
@@ -394,13 +383,12 @@ def loop_survival(
         return patient_results, c_index, mean_auc, ibs, loss_surv
         
     split = "Train" if training else "Validation"
-    # print('\n{}, loss: {:.4f}, c_index: {:.4f},  mean_auc: {:.4f}'.format(split, loss_surv, c_index, mean_auc))
+    
     print('{}, loss: {:.4f}, c_index: {:.4f},  mean_auc: {:.4f}, ibs: {:.4f}\n'.format(split, loss_surv, c_index, mean_auc, ibs))
     if writer:
         writer.add_scalar(f'{split}/loss', loss_surv, epoch)
         writer.add_scalar(f'{split}/c_index', c_index, epoch)
         writer.add_scalar(f'{split}/mean_auc', mean_auc, epoch)
-        # writer.add_scalar(f'{split}/mean_c_index', np.mean(c_index_intervals), epoch)
         
     if early_stopping:
         assert results_dir
@@ -417,26 +405,24 @@ def loop_survival(
     return False
 
 
-def eval_model(dataset, results_dir, args: Namespace, return_feats=True):
+def eval_model(dataset, results_dir, args, cur, return_feats=True):
     """   
         eval for a single fold
     """
     print("Testing on {} samples".format(len(dataset)))
 
     model, _, loss_fn, _ = init_model(args)
-    model.load_state_dict(torch.load(args.load_from))
+    model.load_state_dict(torch.load(os.path.join(args.load_from, f"s_{cur}_checkpoint.pt")))
     
     print('\nInit Data Loader...', end=' ')
     test_loader = get_split_loader(dataset, batch_size=args.batch_size)
     print('Done!')
     
-    # window_size=1000 if args.model_type=="vit" else None
-    window_size=None
-    cindex, _, _, loss = loop_survival(args.cv, model, test_loader, loss_fn=loss_fn, window_size=window_size, results_dir=results_dir, return_feats=return_feats, dataname=args.dataname, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode,cidx_only=True)
+    cindex, _, _, loss = loop_survival(cur, model, test_loader, loss_fn=loss_fn, results_dir=results_dir, return_feats=return_feats, dataname=args.dataname, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode,cidx_only=True)
     
     print("Test c-Index: {:4f} | loss: {:4f}".format(cindex, loss))
     return {
-            'fold': int(args.cv), 
+            'fold': int(cur), 
             'cindex': cindex, 
             "loss": loss
         }

@@ -206,7 +206,7 @@ def save_splits(split_datasets, column_keys, filename, boolean_style=False):
 
 	df.to_csv(filename)
 
-def get_custom_exp_code(args):
+def get_custom_exp_code(args, feat_extractor=None):
 	r"""
 	Updates the argparse.NameSpace with a custom experiment code.
 
@@ -216,27 +216,24 @@ def get_custom_exp_code(args):
 	Returns:
 		- args (NameSpace)
 	"""
-	dataset_path = 'datasets_csv'
+	
 	param_code = ''
 
 	### Model Type
 	param_code += args.model_type.upper()
 
 	inputs = []
-	if args.data_root_dir:
+	if feat_extractor:
+		param_code += "_" + feat_extractor
 		inputs.append("path")
 	if args.tabular_data:
 		inputs.append("tab")
 	args.mode = ("+").join(inputs)
 	
 	param_code += '_' + args.mode
-	param_code += '_%scls' % str(args.n_classes)
-	if args.data_root_dir:
-		fe = args.data_root_dir.split("/")[-1] if len(args.data_root_dir.split("/")[-1]) > 0 else args.data_root_dir.split("/")[-2]
-		param_code += '_%sfeats' % str(fe)
-
+	# param_code += '_%scls' % str(args.n_classes)
+	
 	### Updating
 	args.param_code = param_code
-	args.dataset_path = dataset_path
 
 	return args

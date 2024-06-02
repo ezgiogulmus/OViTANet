@@ -22,7 +22,19 @@ def main(args=None):
 	if args is None:
 		args = setup_argparse()
 	
-	args = get_custom_exp_code(args)
+	feat_extractor = None
+	if args.feats_dir:
+		feat_extractor = args.feats_dir.split('/')[-1] if len(args.feats_dir.split('/')[-1]) > 0 else args.feats_dir.split('/')[-2]
+		if feat_extractor == "RESNET50":
+			args.path_input_dim = 2048 
+		elif feat_extractor in ["PLIP", "CONCH"]:
+			args.path_input_dim = 512 
+		elif feat_extractor == "UNI":
+			args.path_input_dim = 1024
+		else:
+			args.path_input_dim = 768
+
+	args = get_custom_exp_code(args, feat_extractor)
 		
 	print("Experiment Name:", args.run_name)
 	seed_torch(args.seed)
@@ -31,10 +43,6 @@ def main(args=None):
 	args.split_dir = os.path.join('./splits', split_name)
 	print("split_dir", args.split_dir)
 	assert os.path.isdir(args.split_dir)
-
-	if args.data_root_dir:
-		feat_extractor = args.data_root_dir.split('/')[-1] if len(args.data_root_dir.split('/')[-1]) > 0 else args.data_root_dir.split('/')[-2]
-		args.path_input_dim = 2048 if feat_extractor == "Res" else 768
 
 	if args.wandb:
 		args.k = 1
@@ -59,7 +67,7 @@ def main(args=None):
 	
 	if args.nb_tabular_data > 0:
 		suffix = ""
-		if args.data_root_dir not in [None, "None", "none"]:
+		if args.feats_dir not in [None, "None", "none"]:
 			suffix += "_"+args.mm_fusion_type+","+args.mm_fusion
 		suffix += "_"+args.tabular_data
 		args.results_dir += suffix
@@ -70,21 +78,21 @@ def main(args=None):
 		sys.exit()
 	
 	if args.csv_path is None:
-		args.csv_path = f"{args.csv_dir}/"+split_name+".csv"
+		args.csv_path = f"{args.dataset_path}/"+split_name+".csv"
 	print("Loading all the data ...")
 	df = pd.read_csv(args.csv_path, compression="zip" if ".zip" in args.csv_path else None)
 
 	gen_data = np.unique([i.split("_")[-1] for i in tabular_cols if i.split("_")[-1] in ["pro", "rna", "rnz", "dna", "mut", "cnv"]])
 	if len(gen_data) > 0:
 		for g in gen_data:
-			gen_df = pd.read_csv(f"{args.csv_dir}/{split_name}_{g}.csv.zip", compression="zip")
+			gen_df = pd.read_csv(f"{args.dataset_path}/{split_name}_{g}.csv.zip", compression="zip")
 			df = pd.merge(df, gen_df, on='case_id')#, how="outer")
 	df = df.reset_index(drop=True).drop(df.index[df["event"].isna()]).reset_index(drop=True)
 	# assert df.isna().any().any() == False, "There are NaN values in the dataset."
 	print("Successfully loaded.")
 	dataset = MIL_Survival_Dataset(
 		df=df,
-		data_dir= args.data_root_dir,
+		data_dir= args.feats_dir,
 		mode= args.mode,
 		print_info = True,
 		n_bins=args.n_classes,
@@ -151,11 +159,12 @@ def setup_argparse():
 	parser = argparse.ArgumentParser(description='Configurations for Survival Analysis on TCGA Data.')
 	parser.add_argument('--run_name',      type=str, default='run')
 	parser.add_argument('--csv_path',   type=str, default=None)
-	parser.add_argument('--csv_dir', type=str, default="./datasets_csv")
+	parser.add_argument('--dataset_path', type=str, default="./datasets_csv")
 	parser.add_argument('--run_config_file',      type=str, default=None)
+	
 	### Checkpoint + Misc. Pathing Parameters
 	parser.add_argument('--wandb',		 action='store_true', default=False)
-	parser.add_argument('--data_root_dir',   type=str, default=None)
+	parser.add_argument('--feats_dir',   type=str, default=None)
 	parser.add_argument('--seed', 			 type=int, default=1, help='Random seed for reproducible experiment (default: 1)')
 	parser.add_argument('--k', 			     type=int, default=5, help='Number of folds (default: 5)')
 	parser.add_argument('--k_start',		 type=int, default=-1, help='Start fold (Default: -1, last fold)')
@@ -167,7 +176,7 @@ def setup_argparse():
 	parser.add_argument('--overwrite',     	 action='store_true', default=False, help='Whether or not to overwrite experiments (if already ran)')
 
 	### Model Parameters.
-	parser.add_argument('--model_type',      type=str, default='vit', help='Type of model (Default: mcat)')
+	parser.add_argument('--model_type',      type=str, default='vit', choices=["vit", "ssm"], help='Type of model: ViT or SSM (simple survival model)')
 	parser.add_argument('--drop_out',        default=.25, type=float, help='Enable dropout (p=0.25)')
 
 	parser.add_argument('--n_classes', type=int, default=4)
@@ -199,7 +208,7 @@ def setup_argparse():
 	
 	parser.add_argument('--lr',				 type=float, default=0.001, help='Learning rate')
 	parser.add_argument('--train_fraction',      type=float, default=.5, help='fraction of training patches')
-	parser.add_argument('--reg', 			 type=float, default=0.01, help='L2-regularization weight decay')
+	parser.add_argument('--reg', 			 type=float, default=0.001, help='L2-regularization weight decay')
 	
 	parser.add_argument('--weighted_sample', action='store_true', default=False, help='Enable weighted sampling')
 	parser.add_argument('--early_stopping',  default=10, type=int, help='Enable early stopping')
@@ -230,7 +239,7 @@ if __name__ == "__main__":
 	if args.run_config_file:
 		new_run_name = args.run_name
 		results_dir = args.results_dir
-		data_root_dir = args.data_root_dir
+		feats_dir = args.feats_dir
 		wandb = args.wandb
 		cv_fold = args.k
 		max_epochs = args.max_epochs
@@ -244,7 +253,7 @@ if __name__ == "__main__":
 				parser.add_argument('--' + k, default=v, type=type(v))
 		args = parser.parse_args()
 		args.run_name = new_run_name
-		args.data_root_dir = data_root_dir
+		args.feats_dir = feats_dir
 		args.results_dir = results_dir
 		args.wandb = wandb
 		args.k = cv_fold
@@ -285,7 +294,7 @@ if __name__ == "__main__":
 			# },
 			
 		# }
-		# if args.data_root_dir is not None:
+		# if args.feats_dir is not None:
 		# 	parameter_dict.update({
 				'model_dim': {
 					# "values": [None, 128, 256]

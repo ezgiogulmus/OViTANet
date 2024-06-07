@@ -14,36 +14,17 @@ import wandb
 from datasets.dataset_survival import MIL_Survival_Dataset
 from utils.file_utils import save_pkl, load_pkl
 from utils.core_utils import train
-from utils.utils import get_custom_exp_code, get_tabular_data
+from utils.utils import check_directories, get_data
 
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def main(args=None):
 	if args is None:
 		args = setup_argparse()
-	
-	feat_extractor = None
-	if args.feats_dir:
-		feat_extractor = args.feats_dir.split('/')[-1] if len(args.feats_dir.split('/')[-1]) > 0 else args.feats_dir.split('/')[-2]
-		if feat_extractor == "RESNET50":
-			args.path_input_dim = 2048 
-		elif feat_extractor in ["PLIP", "CONCH"]:
-			args.path_input_dim = 512 
-		elif feat_extractor == "UNI":
-			args.path_input_dim = 1024
-		else:
-			args.path_input_dim = 768
-
-	args = get_custom_exp_code(args, feat_extractor)
-		
-	print("Experiment Name:", args.run_name)
 	seed_torch(args.seed)
-	
-	split_name = args.split_dir
-	args.split_dir = os.path.join('./splits', split_name)
-	print("split_dir", args.split_dir)
-	assert os.path.isdir(args.split_dir)
 
+	args = check_directories(args)
+		
 	if args.wandb:
 		args.k = 1
 		args.max_epochs = 20
@@ -55,58 +36,32 @@ def main(args=None):
 			setattr(args, key, value)
 		
 		args.run_name = wandb.run.name
-		args.results_dir = os.path.join(args.results_dir, split_name, "wandb", args.run_name)
-	else:
-		args.results_dir = os.path.join(args.results_dir, args.param_code, args.run_name + '_s{}'.format(args.seed))
-
-	settings = vars(args)
-	print('\nLoad Dataset')
-	
-	tabular_cols = get_tabular_data(args) if args.tabular_data not in ["None", "none", None] else []
-	args.nb_tabular_data = len(tabular_cols)
-	
-	if args.nb_tabular_data > 0:
-		suffix = ""
-		if args.feats_dir not in [None, "None", "none"]:
-			suffix += "_"+args.mm_fusion_type+","+args.mm_fusion
-		suffix += "_"+args.tabular_data
-		args.results_dir += suffix
+		args.results_dir = os.path.join(args.results_dir, args.data_name, "wandb", args.run_name)
 	
 	os.makedirs(args.results_dir, exist_ok=True)
 	if ('summary_latest.csv' in os.listdir(args.results_dir)) and (not args.overwrite):
 		print("Exp Code <%s> already exists! Exiting script." % args.run_name)
 		sys.exit()
-	
-	if args.csv_path is None:
-		args.csv_path = f"{args.dataset_path}/"+split_name+".csv"
-	print("Loading all the data ...")
-	df = pd.read_csv(args.csv_path, compression="zip" if ".zip" in args.csv_path else None)
 
-	gen_data = np.unique([i.split("_")[-1] for i in tabular_cols if i.split("_")[-1] in ["pro", "rna", "rnz", "dna", "mut", "cnv"]])
-	if len(gen_data) > 0:
-		for g in gen_data:
-			gen_df = pd.read_csv(f"{args.dataset_path}/{split_name}_{g}.csv.zip", compression="zip")
-			df = pd.merge(df, gen_df, on='case_id')#, how="outer")
-	df = df.reset_index(drop=True).drop(df.index[df["event"].isna()]).reset_index(drop=True)
-	# assert df.isna().any().any() == False, "There are NaN values in the dataset."
-	print("Successfully loaded.")
+	settings = vars(args)
+	print("Saving to ", args.results_dir)
+	with open(args.results_dir + '/experiment.json', 'w') as f:
+		json.dump(settings, f, indent=4)
+	
+	print("################# Settings ###################")
+	for key, val in settings.items():
+		print("{}:  {}".format(key, val)) 
+
+	print("Loading all the data ...")
+	df, indep_vars = get_data(args)
 	dataset = MIL_Survival_Dataset(
 		df=df,
 		data_dir= args.feats_dir,
 		mode= args.mode,
 		print_info = True,
 		n_bins=args.n_classes,
-		indep_vars=tabular_cols
+		indep_vars=indep_vars
 	)
-
-	print("Saving to ", args.results_dir)
-	with open(args.results_dir + '/experiment.json', 'w') as f:
-		json.dump(settings, f, indent=4)
-
-	print("################# Settings ###################")
-	for key, val in settings.items():
-		print("{}:  {}".format(key, val))  
-		
 
 	if args.k_start == -1:
 		start = 0
@@ -124,8 +79,9 @@ def main(args=None):
 	for i in folds:
 		start = timer()
 		seed_torch(args.seed)
-		results_pkl_path = os.path.join(args.results_dir, 'split_latest_test_{}_results.pkl'.format(i))
-		if os.path.isfile(results_pkl_path):
+		val_results_pkl_path = os.path.join(args.results_dir, 'latest_val_results_split{}.pkl'.format(i))
+		test_results_pkl_path = os.path.join(args.results_dir, 'latest_test_results_split{}.pkl'.format(i))
+		if os.path.isfile(test_results_pkl_path):
 			print("Skipping Split %d" % i)
 			continue
 
@@ -133,7 +89,6 @@ def main(args=None):
 		datasets, train_stats = dataset.return_splits(os.path.join(args.split_dir, f"splits_{i}.csv"))
 		train_stats.to_csv(os.path.join(args.results_dir, f'train_stats_{i}.csv'))
 		
-	
 		log, val_latest, test_latest = train(datasets, i, args)
 		
 		if results is None:
@@ -145,9 +100,9 @@ def main(args=None):
 		if args.wandb:
 			wandb.log(log)
 
-		### Write Results for Each Split to PKL
+		save_pkl(val_results_pkl_path, val_latest)
 		if test_latest != None:
-			save_pkl(results_pkl_path, test_latest)
+			save_pkl(test_results_pkl_path, test_latest)
 		end = timer()
 		print('Fold %d Time: %f seconds' % (i, end - start))
 	
@@ -155,43 +110,43 @@ def main(args=None):
 
 
 def setup_argparse():
-	### Training settings
+	### Data 
 	parser = argparse.ArgumentParser(description='Configurations for Survival Analysis on TCGA Data.')
 	parser.add_argument('--run_name',      type=str, default='run')
-	parser.add_argument('--csv_path',   type=str, default=None)
-	parser.add_argument('--dataset_path', type=str, default="./datasets_csv")
+	parser.add_argument('--data_name',   type=str, default=None)
+	parser.add_argument('--feats_dir',   type=str, default=None)
+
+	parser.add_argument('--dataset_dir', type=str, default="./datasets_csv")
+	parser.add_argument('--results_dir',     type=str, default='./results', help='Results directory (Default: ./results)')
+	parser.add_argument('--split_dir',       type=str, default="./splits", help='Split directory (Default: ./splits)')
+
 	parser.add_argument('--run_config_file',      type=str, default=None)
 	
-	### Checkpoint + Misc. Pathing Parameters
+	### Experiment
 	parser.add_argument('--wandb',		 action='store_true', default=False)
-	parser.add_argument('--feats_dir',   type=str, default=None)
 	parser.add_argument('--seed', 			 type=int, default=1, help='Random seed for reproducible experiment (default: 1)')
 	parser.add_argument('--k', 			     type=int, default=5, help='Number of folds (default: 5)')
 	parser.add_argument('--k_start',		 type=int, default=-1, help='Start fold (Default: -1, last fold)')
 	parser.add_argument('--k_end',			 type=int, default=-1, help='End fold (Default: -1, first fold)')
-	parser.add_argument('--results_dir',     type=str, default='./results', help='Results directory (Default: ./results)')
-
-	parser.add_argument('--split_dir',       type=str, default="tcga_ov", help='Which cancer type within ./splits/<which_splits> to use for training.')
 	parser.add_argument('--log_data',        action='store_true', default=True, help='Log data using tensorboard')
 	parser.add_argument('--overwrite',     	 action='store_true', default=False, help='Whether or not to overwrite experiments (if already ran)')
 
 	### Model Parameters.
-	parser.add_argument('--model_type',      type=str, default='vit', choices=["vit", "ssm"], help='Type of model: ViT or SSM (simple survival model)')
-	parser.add_argument('--drop_out',        default=.25, type=float, help='Enable dropout (p=0.25)')
-
-	parser.add_argument('--n_classes', type=int, default=4)
-	parser.add_argument('--surv_model', default="discrete", choices=["cont", "discrete"])
-	parser.add_argument('--tabular_data', default=None)
-
+	parser.add_argument('--omics', default=None)
+	parser.add_argument('--selected_features',     	 action='store_false', default=True)
 	parser.add_argument('--mm_fusion',        type=str, choices=["crossatt", "concat", "adaptive", "multiply", "bilinear", "lrbilinear", None], default=None)
 	parser.add_argument('--mm_fusion_type',   type=str, choices=["early", "mid", "late", None], default=None)
 
+	parser.add_argument('--surv_model', default="discrete", choices=["cont", "discrete"])
+	parser.add_argument('--n_classes', type=int, default=4)
+
+	parser.add_argument('--model_type',      type=str, default='vit', choices=["vit", "ssm"], help='Type of model: ViT or SSM (simple survival model)')
+	parser.add_argument('--drop_out',        default=.25, type=float, help='Enable dropout (p=0.25)')
 	parser.add_argument('--target_dim', type=int, default=50)
 
 	parser.add_argument("--mlp_type", default="big", choices=["tiny", "small", "big"])
 	parser.add_argument("--activation", default="relu", choices=["relu", "leakyrelu", "gelu"])
 	parser.add_argument("--mlp_skip", default=True, action="store_false")
-	parser.add_argument("--mlp_depth", default=7, type=int)
 
 	parser.add_argument("--depth", default=5, type=int)
 	parser.add_argument("--mha_heads", default=4, type=int)
@@ -207,9 +162,8 @@ def setup_argparse():
 	parser.add_argument('--max_epochs',      type=int, default=30, help='Maximum number of epochs to train')
 	
 	parser.add_argument('--lr',				 type=float, default=0.001, help='Learning rate')
-	parser.add_argument('--train_fraction',      type=float, default=.5, help='fraction of training patches')
 	parser.add_argument('--reg', 			 type=float, default=0.001, help='L2-regularization weight decay')
-	
+	parser.add_argument('--train_fraction',      type=float, default=.5, help='fraction of training patches')
 	parser.add_argument('--weighted_sample', action='store_true', default=False, help='Enable weighted sampling')
 	parser.add_argument('--early_stopping',  default=10, type=int, help='Enable early stopping')
 	parser.add_argument('--bootstrapping', action='store_true', default=False)

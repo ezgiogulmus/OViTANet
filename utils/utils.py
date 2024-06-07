@@ -1,39 +1,48 @@
 import os
-import pickle
-import torch
-import json
+import math
+from itertools import islice, chain
+import collections
 import numpy as np
 import pandas as pd
-import torch.nn as nn
-import pdb
-
 import torch
-import numpy as np
 import torch.nn as nn
-from torchvision import transforms
 from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler, RandomSampler, SequentialSampler, sampler
-import torch.optim as optim
-import pdb
-import torch.nn.functional as F
-import math
-from itertools import islice
-import collections
-
-from torch.utils.data.dataloader import default_collate
-
 
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-def get_tabular_data(args):
+
+import pandas as pd
+from itertools import chain
+
+def get_data(args):
+	df = pd.read_csv(args.csv_path, compression="zip" if ".zip" in args.csv_path else None)
 	
-	with open(os.path.join(args.split_dir, "tabular_fs.json"), "r") as f:
-		tabular_fs = json.load(f)
-	split_data = [i.replace(" ", "") for i in args.tabular_data.split(",")]
+	indep_vars = []
+	if args.omics not in ["None", "none", None]:
+		print("Selected omics variables:")
+		if args.selected_features:
+			omics_cols = {k: [col for col in df.columns if col[-3:]==k] for k in args.omics.split(",")}
+			indep_vars = list(chain(*omics_cols.values()))
+			for k, v in omics_cols.items():
+				print("\t", k, len(v))
+		else:
+			remove_cols = {k: [col for col in df.columns if col[-3:]==k] for k in ["cli", "cnv", "rna", "pro", "mut", "dna"]}
+			if "cli" in args.omics:
+				cli_cols = remove_cols.pop("cli")
+				print("\tcli", len(cli_cols))
+				indep_vars.extend(cli_cols)
+			df = df[[i for i in df.columns if i not in list(chain(*remove_cols.values()))]]
+			print(df.shape)
+			for g in args.omics.split(","):
+				if g != "cli":
+					gen_df = pd.read_csv(f"{args.dataset_dir}/{args.data_name}_{g}.csv.zip", compression="zip")
+					indep_vars.extend(gen_df.columns[1:])
+					print("\t", g, gen_df.shape[1]-1)
+					df = pd.merge(df, gen_df, on='case_id', how="outer")
+			df = df.reset_index(drop=True).drop(df.index[df["event"].isna()]).reset_index(drop=True)
+	args.nb_tabular_data = len(indep_vars)
 	
-	tabular_cols = []
-	for v in split_data:
-		tabular_cols.extend(tabular_fs[v])
-			
-	return sorted(tabular_cols)
+	print("Total number of cases: {} | slides: {}" .format(len(df["case_id"].unique()), len(df)))
+	return df, indep_vars
 
 
 class SubsetSequentialSampler(Sampler):
@@ -111,7 +120,6 @@ def generate_split(cls_ids, val_num, test_num, samples, n_splits = 5,
 	seed = 7, label_frac = 1.0, custom_test_ids = None):
 	indices = np.arange(samples).astype(int)
 	
-	# pdb.set_trace()
 	if custom_test_ids is not None:
 		indices = np.setdiff1d(indices, custom_test_ids)
 
@@ -206,7 +214,7 @@ def save_splits(split_datasets, column_keys, filename, boolean_style=False):
 
 	df.to_csv(filename)
 
-def get_custom_exp_code(args, feat_extractor=None):
+def check_directories(args):
 	r"""
 	Updates the argparse.NameSpace with a custom experiment code.
 
@@ -217,23 +225,44 @@ def get_custom_exp_code(args, feat_extractor=None):
 		- args (NameSpace)
 	"""
 	
-	param_code = ''
+	feat_extractor = None
+	if args.feats_dir:
+		feat_extractor = args.feats_dir.split('/')[-1] if len(args.feats_dir.split('/')[-1]) > 0 else args.feats_dir.split('/')[-2]
+		if feat_extractor == "RESNET50":
+			args.path_input_dim = 2048 
+		elif feat_extractor in ["PLIP", "CONCH"]:
+			args.path_input_dim = 512 
+		elif feat_extractor == "UNI":
+			args.path_input_dim = 1024
+		else:
+			args.path_input_dim = 768
 
-	### Model Type
-	param_code += args.model_type.upper()
+	args.split_dir = os.path.join('./splits', args.data_name)
+	print("split_dir", args.split_dir)
+	assert os.path.isdir(args.split_dir)
 
+	param_code = args.model_type.upper()
 	inputs = []
 	if feat_extractor:
 		param_code += "_" + feat_extractor
 		inputs.append("path")
-	if args.tabular_data:
+	if args.omics:
 		inputs.append("tab")
+	
 	args.mode = ("+").join(inputs)
+	if args.mode != "path+tab":
+		args.mm_fusion, args.mm_fusion_type = None, None
 	
 	param_code += '_' + args.mode
-	# param_code += '_%scls' % str(args.n_classes)
-	
-	### Updating
-	args.param_code = param_code
 
+	if args.omics not in ["None", "none", None]:
+		suffix = ""
+		if args.feats_dir not in [None, "None", "none"]:
+			suffix += "_"+args.mm_fusion_type+","+args.mm_fusion
+		suffix += "_"+args.omics
+		args.run_name += suffix
+	
+	args.results_dir = os.path.join(args.results_dir, param_code, args.run_name)
+	args.csv_path = f"{args.dataset_dir}/"+args.data_name+".csv"
+	assert os.path.isfile(args.csv_path), f"Data file does not exist > {args.csv_path}"
 	return args

@@ -157,7 +157,7 @@ def setup_argparse():
 
 	############ Multi-modal Parameters
 	parser.add_argument('--omics', default=None)
-	parser.add_argument('--selected_features',     	 action='store_false', default=True)
+	parser.add_argument('--selected_features',     	 action='store_true', default=False)
 	parser.add_argument('--mode',            type=str, choices=['omic', 'path', 'pathomic', 'cluster', 'coattn'], default='coattn', help='Specifies which modalities to use / collate function in dataloader.')
 	parser.add_argument('--fusion',          type=str, choices=['None', 'concat', 'bilinear'], default='concat', help='Type of fusion. (Default: concat).')
 	parser.add_argument('--apply_sig',		 action='store_true', default=False, help='Use genomic features as signature embeddings.')
@@ -192,8 +192,8 @@ def setup_argparse():
 	parser.add_argument('--bag_loss',        type=str, choices=['svm', 'ce', 'ce_surv', 'nll_surv', 'cox_surv'], default='nll_surv', help='slide-level classification loss function (default: ce)')
 
 	parser.add_argument('--train_fraction',      type=float, default=1.0, help='fraction of training labels (default: 1.0)')
-	parser.add_argument('--weighted_sample', action='store_true', default=True, help='Enable weighted sampling')
-	parser.add_argument('--early_stopping',  action='store_true', default=False, help='Enable early stopping')
+	parser.add_argument('--weighted_sample', action='store_true', default=False, help='Enable weighted sampling')
+	parser.add_argument('--early_stopping',  type=int, default=20, help='Enable early stopping')
 
 	parser.add_argument('--bootstrapping', action='store_true', default=False)
 

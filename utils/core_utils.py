@@ -1,15 +1,10 @@
 from argparse import Namespace
-from collections import OrderedDict
 import os
-import pandas as pd
-import pickle 
-import h5py
-
-from lifelines.utils import concordance_index
+import pandas as pd 
 import numpy as np
 from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc, integrated_brier_score
-
 import torch
+from torch import nn, optim
 from torch.utils.data import DataLoader, RandomSampler
 
 from models.surv_model import SurvMIL
@@ -17,7 +12,7 @@ from models.vit2d import ViT
 from models.mlp_model import MLP
 from utils.utils import *
 from utils.loss_func import CoxSurvLoss, NLLSurvLoss
-import torch.nn as nn
+
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 print("Device: ", device)
 
@@ -67,14 +62,13 @@ class EarlyStopping:
             print(f'Saving the best model ...')
         torch.save(model.state_dict(), ckpt_name)
 
-def init_model(args, ckpt_path=None):
+def init_model(args, ckpt_path=None, print_model=False):
     # Model, optimizer and loss
 
     model_dict = {
         "target_features": args.target_dim,
         "n_classes": args.n_classes if args.surv_model == "discrete" else 1,
         "drop_out": args.drop_out,
-        "mlp_depth": args.mlp_depth,
         "mlp_type": args.mlp_type,
         "activation": args.activation,
         "skip": args.mlp_skip,
@@ -101,11 +95,14 @@ def init_model(args, ckpt_path=None):
             model = ViT(**model_dict)
         elif args.model_type == "ssm":
             model = SurvMIL(**model_dict)
-        
+    
+    if print_model:
+        print_network(model)
     
     if ckpt_path:
         model.load_state_dict(torch.load(ckpt_path))
     model = model.to(device)
+
     
     if args.opt == "adam":
         optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=args.reg)
@@ -114,7 +111,7 @@ def init_model(args, ckpt_path=None):
     else:
         raise NotImplementedError
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=3, verbose=True, min_lr=1e-7)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=3, min_lr=1e-7)
 
     if args.surv_model == "cont":
         loss_fn = CoxSurvLoss(device)
@@ -158,7 +155,7 @@ def train(datasets: tuple, cur: int, args: Namespace):
     val_loader = get_split_loader(val_split, batch_size=args.batch_size)
     test_loader = get_split_loader(test_split, batch_size=args.batch_size)
 
-    model, optimizer, loss_fn, scheduler = init_model(args)
+    model, optimizer, loss_fn, scheduler = init_model(args, print_model=True if cur == 0 else False)
     if args.early_stopping > 0:
         early_stopping = EarlyStopping(mode="min", warmup=2, patience=args.early_stopping, stop_epoch=20, verbose = True)
     else:
@@ -388,7 +385,10 @@ def loop_survival(
     if writer:
         writer.add_scalar(f'{split}/loss', loss_surv, epoch)
         writer.add_scalar(f'{split}/c_index', c_index, epoch)
-        writer.add_scalar(f'{split}/mean_auc', mean_auc, epoch)
+        if not training:
+            writer.add_scalar(f'{split}/mean_auc', mean_auc, epoch)
+            writer.add_scalar(f'{split}/ibs', ibs, epoch)
+            writer.add_scalar(f'{split}/lr', scheduler.get_last_lr(), epoch)
         
     if early_stopping:
         assert results_dir
@@ -411,7 +411,7 @@ def eval_model(dataset, results_dir, args, cur, return_feats=True):
     """
     print("Testing on {} samples".format(len(dataset)))
 
-    model, _, loss_fn, _ = init_model(args)
+    model, _, loss_fn, _ = init_model(args, print_model=True if cur == 0 else False)
     model.load_state_dict(torch.load(os.path.join(args.load_from, f"s_{cur}_checkpoint.pt")))
     
     print('\nInit Data Loader...', end=' ')

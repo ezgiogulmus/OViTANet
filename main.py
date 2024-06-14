@@ -142,7 +142,7 @@ def setup_argparse():
 	parser.add_argument('--overwrite',     	 action='store_true', default=False, help='Whether or not to overwrite experiments (if already ran)')
 
 	### Model Parameters
-	parser.add_argument('--model_type', type=str, choices=["vit", "ssm", 'clam_sb', 'clam_mb', 'mil', "transmil", 'snn', 'deepset', 'amil', 'mcat', "motcat", "porpmmf", "porpamil"], default='clam_sb',  help='type of model (default: clam_sb, clam w/ single attention branch)')
+	parser.add_argument('--model_type', type=str, choices=["mlp", "vit", "ssm", 'clam_sb', 'clam_mb', 'mil', "transmil", 'snn', 'deepset', 'amil', 'mcat', "motcat", "porpmmf", "porpamil"], default='clam_sb',  help='type of model (default: clam_sb, clam w/ single attention branch)')
 	parser.add_argument('--model_size', type=str, choices=['small', 'big'], default='small', help='size of model, does not affect mil')
 	parser.add_argument('--drop_out',        default=.25, type=float, help='Enable dropout (p=0.25)')
 	parser.add_argument('--n_classes', type=int, default=4)
@@ -196,7 +196,6 @@ def setup_argparse():
 	parser.add_argument('--early_stopping',  type=int, default=20, help='Enable early stopping')
 
 	parser.add_argument('--bootstrapping', action='store_true', default=False)
-
 
 	args = parser.parse_args()
 	return args
@@ -253,7 +252,7 @@ if __name__ == "__main__":
 			print("Initializing MM survival model")
 			import mmsurv
 			mmsurv.run(args)
-		elif args.model_type in ['clam_sb', 'clam_mb', 'mil', "transmil"]:
+		elif args.model_type in ['clam_sb', 'clam_mb', "transmil"]:
 			print("Initializing WSI survival model")
 			import wsisurv
 			wsisurv.run(args)

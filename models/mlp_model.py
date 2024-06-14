@@ -85,3 +85,6 @@ def initialize_weights(module):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
 
+if __name__ == "__main__":
+    model = MLP(1000, mlp_type="big", activation="relu", drop_out=.25, target_features=50, n_classes=1, skip=True, feat_extractor=False, batch_norm=False)
+    print(model)

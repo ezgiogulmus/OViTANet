@@ -260,6 +260,8 @@ def check_directories(args):
 		if args.feats_dir not in [None, "None", "none"]:
 			suffix += "_"+args.mm_fusion_type+","+args.mm_fusion
 		suffix += "_"+args.omics
+		if not args.selected_features:
+			suffix += "_all"
 		args.run_name += suffix
 	
 	args.results_dir = os.path.join(args.results_dir, param_code, args.run_name)

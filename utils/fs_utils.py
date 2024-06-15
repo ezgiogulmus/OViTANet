@@ -4,22 +4,14 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import VarianceThreshold
 from lifelines.statistics import logrank_test
-import os
-import pandas as pd
-import numpy as np
-import json
-
-from sklearn.feature_selection import VarianceThreshold
 from sklearn.model_selection import KFold
-from lifelines import KaplanMeierFitter
-from lifelines.statistics import logrank_test
 from lifelines import CoxPHFitter
 from lifelines.utils import concordance_index
 import shap
 
 def load_data(args):
     cli_df = pd.read_csv(os.path.join(args.dataset_dir, f"{args.data_name}.csv"))
-    cli_df = cli_df.drop_duplicates("case_id").drop(["slide_id", "group"], axis=1).reset_index(drop=True)
+    cli_df = cli_df.drop_duplicates("case_id").reset_index(drop=True)
     tests = pd.read_csv(os.path.join(args.split_dir, f"{args.data_name}/splits_0.csv"))["test"].dropna().values
     cli_df["split"] = [pd.NA] * len(cli_df)
     cli_df.loc[cli_df["case_id"].isin(tests), "split"] = "test"
@@ -29,7 +21,7 @@ def load_data(args):
         target_df = pd.read_csv(os.path.join(args.dataset_dir, f"{args.data_name}_{args.target_data}.csv.zip"), compression="zip")
         target_df = pd.merge(target_df, cli_df[["case_id", "split", "survival_months", "event"]], on="case_id")
     else:
-        target_df = cli_df
+        target_df = cli_df.drop(["slide_id", "group"], axis=1)
 
     target_df.reset_index(drop=True, inplace=True)
     assert not target_df.columns.duplicated().any(), "Duplicated features are found."
@@ -39,11 +31,9 @@ def load_data(args):
     return target_df
 
 def split_data(df):
-    train_df = df[df["split"] != "test"].drop(["split"], axis=1)
-    test_df = df[df["split"] == "test"].drop(["split"], axis=1)
-    train_df = train_df.drop_duplicates("case_id").reset_index(drop=True)
-    test_df = test_df.drop_duplicates("case_id").reset_index(drop=True)
-
+    train_df = df[df["split"] != "test"].drop(["split"], axis=1).reset_index(drop=True)
+    test_df = df[df["split"] == "test"].drop(["split"], axis=1).reset_index(drop=True)
+    
     X_train = train_df.drop(["case_id", "event", "survival_months"], axis=1)
     y_train_time = train_df["survival_months"]
     y_train_event = train_df["event"]
@@ -61,7 +51,7 @@ def fill_missing(X, fill="median"):
     indep_vars = X.columns
     if X.isna().any().any():
         medians = X.median() if fill=="median" else X.mean()
-        print("Filling missing values with ", fill)
+        print("\nFilling missing values with ", fill)
         for i, col in enumerate(indep_vars):
             if i % 1000 == 0:
                 print(i, "/", len(indep_vars))
@@ -74,7 +64,7 @@ def var_filter(X, thresh=0.01):
     indep_vars = X.columns
     var_sel = VarianceThreshold(thresh)
     X = var_sel.fit_transform(X)
-    X = pd.DataFrame(X, columns=indep_vars[var_sel.get_support()])
+    X = pd.DataFrame(X, columns=indep_vars[var_sel.get_support()]).reset_index(drop=True)
     print("\t**After variance threshold: ", X.shape)
     removed_cols = [col for col in indep_vars if col not in X.columns]
     return X, removed_cols
@@ -107,7 +97,7 @@ class MultiCollinearityEliminator:
 
     def createCorrMatrixWithTarget(self):
         corrMatrix = self.createCorrMatrix(include_target = True)
-        corrWithTarget = pd.DataFrame(corrMatrix.loc[:,self.target.columns[0]]).drop([self.target.columns[0]], axis = 0).sort_values(by = self.target.columns[0])                    
+        corrWithTarget = pd.DataFrame(corrMatrix.loc[:,self.target.columns[0]]).drop([self.target.columns[0]], axis = 0).sort_values(by = self.target.columns[0], ascending=False)                    
         # print(corrWithTarget, '\n')
         return corrWithTarget
 
@@ -133,7 +123,6 @@ class MultiCollinearityEliminator:
             # print(idx, '\n')
             if (idx in colCorr):
                 self.df = self.df.drop(idx, axis =1)
-                break
         return self.df
 
     def autoEliminateMulticollinearity(self):
@@ -147,8 +136,7 @@ def multicol_filter(X, y, thresh=0.7):
     # corr > 0.7 indicates multicollinearity
     # https://blog.clairvoyantsoft.com/correlation-and-collinearity-how-they-can-make-or-break-a-model-9135fbe6936a#:~:text=Multicollinearity%20is%20a%20situation%20where,indicates%20the%20presence%20of%20multicollinearity.
     
-    df = pd.concat([X, y], axis=1)
-    corr = df.corr().abs()
+    corr = X.corr().abs()
     indep_vars = X.columns
 
     if len(indep_vars) < 1000:
@@ -170,13 +158,14 @@ def logrank(X, y):
 
     for feature in X.columns:
         if len(X[feature].unique()) > 2:
-            data["group"] = data[feature].apply(lambda x: x > data[feature].median())
+            median_value = data[feature].median()
+            data["logrank_group"] = data[feature] > median_value
         else:
-            data["group"] = data[feature].apply(lambda x: x > 0)
+            data["logrank_group"] = data[feature] > 0
         
         T = data['survival_months']
         E = data['event']
-        ix = data["group"]
+        ix = data["logrank_group"]
         results = logrank_test(T[ix], T[~ix], event_observed_A=E[ix], event_observed_B=E[~ix])
         
         results_df[feature] = results.p_value
@@ -191,10 +180,14 @@ def logrank(X, y):
     return X, results_df, removed_cols
 
 def feature_importance(X, y):
-    cph = CoxPHFitter(penalizer=.1)
-    cph.fit(pd.concat([X, y], axis=1), 'survival_months', 'event')
+    cph = CoxPHFitter(penalizer=0.1)
+    cph.fit(pd.concat([X, y], axis=1), duration_col='survival_months', event_col='event')
 
-    explainer = shap.Explainer(cph.predict_partial_hazard, X, max_evals=2 * X.shape[1] + 1)
+    try:
+        explainer = shap.Explainer(cph.predict_partial_hazard, X, max_evals=2 * X.shape[1] + 1)
+    except TypeError:
+        explainer = shap.Explainer(cph.predict_partial_hazard, X)
+        
     shap_values = explainer(X)
     feature_importance = np.abs(shap_values.values).mean(axis=0)
 
@@ -217,7 +210,7 @@ def _cv_surv(X, y, n_splits=5):
         
         # Fit the Cox Proportional Hazards model
         cph = CoxPHFitter(penalizer=0.1)
-        cph.fit(train_data, 'survival_months', 'event')
+        cph.fit(train_data, duration_col='survival_months', event_col='event')
         
         # Predict partial hazard for test set
         partial_hazard = cph.predict_partial_hazard(test_data)
@@ -235,24 +228,26 @@ def cross_validate_survival_model(X, y, feature_importance_df, save_path=None):
 
     max_value = 0
     counter = 0
+
     for i in range(1, len_features+1):
         selected_features = feature_importance_df.loc[:i, "feature"].values
         
         mean_c_index, std_c_index = _cv_surv(X[selected_features], y)
         results.append((i, mean_c_index, std_c_index))
+
         if mean_c_index > max_value:
             max_value = mean_c_index
             counter = 0
         else:
             counter += 1
 
-        if i % print_every == 0:
-            print(f'Number of features: {i} | Cross-validated C-index: {mean_c_index:.4f} ± {std_c_index:.4f}')
+        if i % print_every == 0 or i == len_features:
+            print(f'Number of features: {i} | C-index (mean ± std): {mean_c_index:.4f} ± {std_c_index:.4f}')
             if save_path is not None:
                 pd.DataFrame(results, columns=["Number of features", "Mean C-index", "Std C-index"]).to_csv(save_path)
 
         if i > 300 and counter > 50:
-            print("No improvement since {} for the last {} iterations. Early stopping..." .format(max_value, counter))
+            print(f"No improvement for the last {counter} iterations. Early stopping at {i} features...")
             break
 
     results_df = pd.DataFrame(results, columns=["Number of features", "Mean C-index", "Std C-index"])

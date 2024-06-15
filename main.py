@@ -46,7 +46,6 @@ def main(args=None):
 	for key, val in settings.items():
 		print("{}:  {}".format(key, val)) 
 
-	print("Loading all the data ...")
 	df, indep_vars = get_data(args)
 	dataset = MIL_Survival_Dataset(
 		df=df,

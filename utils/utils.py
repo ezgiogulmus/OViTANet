@@ -265,6 +265,7 @@ def check_directories(args):
 		args.run_name += suffix
 	
 	args.results_dir = os.path.join(args.results_dir, param_code, args.run_name)
-	args.csv_path = f"{args.dataset_dir}/"+args.data_name+".csv"
+	args.csv_path = f"{args.dataset_dir}/"+args.data_name+".csv" if not args.selected_features else f"{args.dataset_dir}/"+args.data_name+"_selected.csv"
+	print("Loading the data from ", args.csv_path)
 	assert os.path.isfile(args.csv_path), f"Data file does not exist > {args.csv_path}"
 	return args

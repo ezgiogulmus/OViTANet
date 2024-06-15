@@ -15,6 +15,7 @@ setup(
         "torchvision",
         "numpy==1.23.4", 
         "pandas==1.4.3", 
+        "openpyxl",
         "h5py",
         "scikit-learn", 
         "scikit-survival",

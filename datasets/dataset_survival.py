@@ -18,7 +18,7 @@ from torch.utils.data import Dataset
 class Generic_WSI_Survival_Dataset(Dataset):
 	def __init__(self,
 		df, print_info = False, n_bins = 4, 
-		indep_vars=[],  mode="path", survival_time_list=[]):
+		indep_vars=[],  mode="path", survival_time_list=None):
 		"""
 		Args:
 			print_info (bool): Flag to print dataset information.
@@ -39,7 +39,7 @@ class Generic_WSI_Survival_Dataset(Dataset):
 		
 		patients_df = slide_data.drop_duplicates(['case_id']).copy()
 
-		survival_time_list = survival_time_list if survival_time_list != [] else patients_df["survival_months"]
+		survival_time_list = survival_time_list if survival_time_list is not None else patients_df["survival_months"]
 		_, time_breaks = pd.qcut(survival_time_list, q=self.num_intervals, retbins=True, labels=False)
 		time_breaks[0] = 0
 		time_breaks[-1] += 1

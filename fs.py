@@ -1,63 +1,90 @@
+import sys
 import os
 import pandas as pd
 import numpy as np
-import json
 import argparse
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.model_selection import KFold
-from lifelines import KaplanMeierFitter
-from lifelines.statistics import logrank_test
-from lifelines import CoxPHFitter
-from lifelines.utils import concordance_index
-import shap
+import warnings
+from lifelines.exceptions import ConvergenceWarning
+from utils.fs_utils import *
+warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
+
+parser = argparse.ArgumentParser(description='Feature selection')
 parser.add_argument('data_name', type=str)
 parser.add_argument('target_data', type=str)
 parser.add_argument('--dataset_dir', type=str, default="./datasets_csv")
 parser.add_argument('--split_dir', type=str, default='./splits')
+parser.add_argument('--results_dir', type=str, default='./results/fs')
 parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
+parser.add_argument('--load_tmp_data', action="store_true", default=False)
+parser.add_argument('--only_filtering', action="store_true", default=False)
 parser.add_argument('--verbose', action="store_true", default=False)
+args = parser.parse_args()
 
-args.dname = "tcga_cesc_os"
+if __name__ == "__main__":
+    np.random.seed(args.seed)
+    args.results_dir = os.path.join(args.results_dir, args.data_name)
+    os.makedirs(args.results_dir, exist_ok=True)
+    saving_dict = {}
+    if not args.load_tmp_data:
+        df = load_data(args)
+        X_train, y_train_time, y_train_event = split_data(df)
+        y_train = pd.concat([y_train_time, y_train_event], axis=1)
 
-target_data = "mut"
-cli_df = pd.read_csv(os.path.join(args.dataset_dir, f"{args.dname}.csv"))
+        X_train = fill_missing(X_train)
+        print("\t**Initial shape: ", X_train.shape)
+        X_train, removed_cols = var_filter(X_train, thresh=0.01)
+        X_train = norm(X_train)
+        X_train, removed_cols2 = multicol_filter(X_train, y_train_time)
+        X_train, logrank_results, removed_cols3 = logrank(X_train, y_train)
+        saving_dict["LogRank"] = logrank_results
+        print("Removed {}+{}+{}={} features. Remaining: {}" .format(len(removed_cols), len(removed_cols2), len(removed_cols3), len(removed_cols)+len(removed_cols2)+len(removed_cols3), X_train.shape[1]))
+        max_length = max(len(removed_cols), len(removed_cols2), len(removed_cols3))
 
-cli_df = cli_df.drop_duplicates("case_id").drop(["slide_id", "group"], axis=1).reset_index(drop=True)
-tests = pd.read_csv(os.path.join(args.split_dir, f"{args.dname}/splits_0.csv"))["test"].dropna().values
-cli_df["split"] = [pd.NA] * len(cli_df)
-cli_df.loc[cli_df["case_id"].isin(tests), "split"] = "test"
-cli_df.loc[~cli_df["case_id"].isin(tests), "split"] = "train"
+        removed_cols_padded = np.pad(removed_cols, (0, max_length - len(removed_cols)), constant_values=np.nan)
+        removed_cols2_padded = np.pad(removed_cols2, (0, max_length - len(removed_cols2)), constant_values=np.nan)
+        removed_cols3_padded = np.pad(removed_cols3, (0, max_length - len(removed_cols3)), constant_values=np.nan)
 
-if target_data != "cli":
-    target_df = pd.read_csv(os.path.join(args.dataset_dir, f"{args.dname}_{target_data}.csv.zip"), compression="zip")
-    target_df = pd.merge(target_df, cli_df[["case_id", "split", "survival_months", "event"]], on="case_id")
-else:
-    target_df = cli_df
+        removed_df = pd.DataFrame({
+            "VarThresh": removed_cols_padded,
+            "CollinReduced": removed_cols2_padded,
+            "Univariate": removed_cols3_padded
+        })
+        saving_dict["Filtering"] = removed_df
+        removed_df.to_csv(os.path.join(args.results_dir, f"tmp_filtering_{args.target_data}.csv"))
+        logrank_results.to_csv(os.path.join(args.results_dir, f"tmp_logrank_{args.target_data}.csv"))
+        if args.only_filtering:
+            sys.exit(0)
+        pd.concat([X_train, y_train], axis=1).to_csv(os.path.join(args.results_dir, f"tmp_data_{args.target_data}.csv"))
+    else:
+        data = pd.read_csv(os.path.join(args.results_dir, f"tmp_data_{args.target_data}.csv"))
+        if "Unnamed: 0" in data.columns:
+            data.drop("Unnamed: 0", axis=1, inplace=True)
+        X_train = data.drop(["survival_months", "event"], axis=1)
+        y_train = data[["survival_months", "event"]]
+        print("Loaded data columns: ", X_train.columns)
+        
+    if os.path.isfile(os.path.join(args.results_dir, f"tmp_feats_{args.target_data}.csv")):
+        feature_importance_df = pd.read_csv(os.path.join(args.results_dir, f"tmp_feats_{args.target_data}.csv"))
+    else:
+        feature_importance_df = feature_importance(X_train, y_train)
+        feature_importance_df.to_csv(os.path.join(args.results_dir, f"tmp_feats_{args.target_data}.csv"))
+    saving_dict["SHAP"] = feature_importance_df
+    results_df = cross_validate_survival_model(X_train, y_train, feature_importance_df, save_path=os.path.join(args.results_dir, f"tmp_cv_{args.target_data}.csv"))
+    saving_dict["CV"] = results_df
 
-target_df.reset_index(drop=True, inplace=True)
-target_df.shape, target_df.isna().any().any(), target_df["case_id"].duplicated().any(), target_df.columns.duplicated().any(), target_df.columns.isna().any()
-
-def split_data(args, df):
-    train_df = df[df["split"] != "test"].drop(["split"], axis=1)
-    test_df = df[df["split"] == "test"].drop(["split"], axis=1)
-    train_df = train_df.drop_duplicates("case_id").reset_index(drop=True)
-    test_df = test_df.drop_duplicates("case_id").reset_index(drop=True)
-
-    train_ids = train_df[["case_id"]]
-    X_train = train_df.drop(["case_id", "event", "survival_months"], axis=1)
-    y_train = train_df["survival_months"]
-    y_train_event = train_df["event"]
-
-    test_ids = test_df[["case_id"]]
-    X_test = test_df.drop(["case_id", "event", "survival_months"], axis=1)
-    y_test = test_df["survival_months"]
-    y_test_event = test_df["event"]
-    print(f"Train set shape: {X_train.shape}, test set shape: {X_test.shape}\n")
-    print("Train survival times:")
-    print(y_train.describe())
-    print("\nTest survival times:")
-    print(y_test.describe())
-    return X_train, y_train, y_train_event
+    if os.path.isfile(os.path.join(args.results_dir, f"tmp_filtering_{args.target_data}.csv")):
+        removed_df = pd.read_csv(os.path.join(args.results_dir, f"tmp_filtering_{args.target_data}.csv"))
+        saving_dict["Filtering"] = removed_df
+        
+    with pd.ExcelWriter(os.path.join(args.results_dir, f'fs_{args.target_data}.xlsx')) as writer:
+        for k, v in saving_dict.items():
+            v.to_excel(writer, sheet_name=k)
+    
+    os.remove(os.path.join(args.results_dir, f"tmp_feats_{args.target_data}.csv"))
+    os.remove(os.path.join(args.results_dir, f"tmp_data_{args.target_data}.csv"))
+    os.remove(os.path.join(args.results_dir, f"tmp_cv_{args.target_data}.csv"))
+    os.remove(os.path.join(args.results_dir, f"tmp_filtering_{args.target_data}.csv"))
+    os.remove(os.path.join(args.results_dir, f"tmp_logrank_{args.target_data}.csv"))
+    
+    

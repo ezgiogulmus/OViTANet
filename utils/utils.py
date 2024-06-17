@@ -126,7 +126,6 @@ def model_builder(args, ckpt_path=None, print_model=False):
 	"nb_tabular_data": args.nb_tabular_data,
 	"mm_fusion": args.fusion,
 	"mm_fusion_type": args.fusion_location,
-	"nb_of_omics": len(args.omics.split(",")),
 	"path_input_dim": args.path_input_dim,
 	"depth": args.depth, 
 	"mha_heads": args.mha_heads,

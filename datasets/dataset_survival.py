@@ -163,7 +163,7 @@ class Generic_WSI_Survival_Dataset(Dataset):
 
 
 class MIL_Survival_Dataset(Generic_WSI_Survival_Dataset):
-	def __init__(self, data_dir, separate_branches, **kwargs):
+	def __init__(self, data_dir, separate_branches=False, **kwargs):
 		super(MIL_Survival_Dataset, self).__init__(**kwargs)
 		self.data_dir = data_dir
 		self.separate_branches = separate_branches

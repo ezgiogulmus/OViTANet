@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.model_utils import SimpleFusion
 
 class MLPBlock(nn.Module):
     def __init__(self, in_features, out_features, activation_fn, drop_out, bn=False):
@@ -72,6 +73,27 @@ class MLP(nn.Module):
             return x
         return self.final(x)
 
+
+class MB_MLP(nn.Module):
+    def __init__(self, nb_tabular_data, target_features=50, n_classes=1, feat_extractor=False, mm_fusion="concat", **kwargs):
+        super(MB_MLP, self).__init__()
+        self.feat_extractor = feat_extractor
+        self.encoders = nn.ModuleList([MLP(nb_tabular_data[i], feat_extractor=True, target_features=target_features, **kwargs) for i in range(len(nb_tabular_data))])
+        self.fuser = SimpleFusion(mm_fusion, target_features, nb_of_vectors=len(nb_tabular_data))
+        if mm_fusion == "concat":
+            target_features *= len(nb_tabular_data)
+        if not feat_extractor:
+            self.classifier = nn.Linear(target_features, n_classes)
+
+    def forward(self, omics_list):
+        assert len(omics_list) == len(self.encoders), "Something's wrong!"
+        encoded_omics = [self.encoders[i](omics_list[i]) for i in range(len(omics_list))]
+        fused_omics = self.fuser(encoded_omics)
+        if self.feat_extractor:
+            return fused_omics
+        return self.classifier(fused_omics)
+        
+
 def initialize_weights(module):
     for m in module.modules():
         if isinstance(m, nn.Linear):
@@ -84,5 +106,19 @@ def initialize_weights(module):
             nn.init.constant_(m.bias, 0)
 
 if __name__ == "__main__":
-    model = MLP(1000, mlp_type="big", activation="relu", drop_out=.25, target_features=50, n_classes=1, skip=True, feat_extractor=False, batch_norm=False)
-    print(model)
+    # model = MLP(1000, mlp_type="big", activation="relu", drop_out=.25, target_features=50, n_classes=1, skip=True, feat_extractor=False, batch_norm=False)
+    import numpy as np
+            
+    np.random.seed(0)
+    dim1, dim2, dim3 = 100, 200, 400
+    a = torch.FloatTensor(np.random.randn(1, dim1))
+    b = torch.FloatTensor(np.random.randn(1, dim2))
+    c = torch.FloatTensor(np.random.randn(1, dim3))
+    torch.random.manual_seed(0)
+    torch.use_deterministic_algorithms(True)
+
+    print(a[0, 0], b[0, 0], c[0, 0])
+    for fusion in ["concat", "adaptive", "multiply", "bilinear"]:
+        model = MB_MLP([dim1, dim2, dim3], mm_fusion=fusion)
+        out = model([a, b, c])
+        print(fusion, out)

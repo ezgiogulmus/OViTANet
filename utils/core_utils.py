@@ -228,7 +228,13 @@ def loop_survival(
 			random_ids = np.random.permutation(np.array(range(data_WSI.shape[0])))[:int(data_WSI.shape[0]*training_frac)]
 			data_WSI = data_WSI[random_ids]
 		data_WSI = data_WSI.to(device) if mode != "tab" else None
-		data_tab = data_tab.to(device) if "tab" in mode else None
+		if "tab" in mode:
+			if isinstance(data_tab, list):
+				data_tab = [i.to(device) for i in data_tab]
+			else:
+				data_tab = data_tab.to(device)
+		else: 
+			data_tab = None
 				
 		y_disc = y_disc.to(device)
 		event_time = event_time.to(device)

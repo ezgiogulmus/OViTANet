@@ -1,0 +1,40 @@
+Device:  cuda
+split_dir ./splits/baskent_os
+csv_path ./datasets_csv/baskent_os.csv
+Experiment Name: run
+
+Load train survival times:  ./datasets_csv/tcga_ov_os.csv
+
+Load Dataset:  ./datasets_csv/baskent_os.csv
+Total number of cases: 134 | slides: 393
+Number of selected tabular data:  0
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/eval.py", line 126, in <module>
+    results = main(eval_args)
+  File "/media/nfs/Desktop/OViTANet/eval.py", line 62, in main
+    surv_dataset = MIL_Survival_Dataset(
+  File "/media/nfs/Desktop/OViTANet/datasets/dataset_survival.py", line 166, in __init__
+    super(MIL_Survival_Dataset, self).__init__(**kwargs)
+  File "/media/nfs/Desktop/OViTANet/datasets/dataset_survival.py", line 42, in __init__
+    survival_time_list = survival_time_list if survival_time_list != [] else patients_df["survival_months"]
+ValueError: operands could not be broadcast together with shapes (1231,) (0,) 
+Device:  cuda
+split_dir ./splits/baskent_os
+csv_path ./datasets_csv/baskent_os.csv
+Experiment Name: run
+
+Load train survival times:  ./datasets_csv/tcga_ov_os.csv
+
+Load Dataset:  ./datasets_csv/baskent_os.csv
+Total number of cases: 134 | slides: 393
+Number of selected tabular data:  0
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/eval.py", line 126, in <module>
+    results = main(eval_args)
+  File "/media/nfs/Desktop/OViTANet/eval.py", line 62, in main
+    surv_dataset = MIL_Survival_Dataset(
+  File "/media/nfs/Desktop/OViTANet/datasets/dataset_survival.py", line 166, in __init__
+    super(MIL_Survival_Dataset, self).__init__(**kwargs)
+  File "/media/nfs/Desktop/OViTANet/datasets/dataset_survival.py", line 42, in __init__
+    survival_time_list = survival_time_list if survival_time_list != [] else patients_df["survival_months"]
+ValueError: operands could not be broadcast together with shapes (1231,) (0,) 

@@ -55,14 +55,14 @@ class GMCAT(nn.Module):
         
         # Early fusion
         if self.mm_fusion_type == "early":
-            x = self.fuser(x, tab_feats)
+            x = self.fuser([x, tab_feats])
         
         x, attn_weights = self.transformer(x, tab_feats)
         
         x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
         # Late fusion
         if self.mm_fusion_type == "late":
-            x = self.fuser(x, tab_feats.squeeze(1))
+            x = self.fuser([x, tab_feats.squeeze(1)])
         
         output = self.classifier(x)
         if kwargs["return_feats"]:
@@ -71,15 +71,34 @@ class GMCAT(nn.Module):
         return output
     
 if __name__ == "__main__":
+    import numpy as np
+            
+    np.random.seed(0)
+    a = torch.FloatTensor(np.random.randn(2, 768))
+    b = torch.FloatTensor(np.random.randn(1, 10))
+    torch.random.manual_seed(0)
+    torch.use_deterministic_algorithms(True)
+
+    print(a[0, 0], b[0, 0])
     for i in ["mid", "ms"]:
         for j in ["adaptive", "multiply", "concat", "bilinear", "crossatt"]:
-            model = GMCAT(nb_tabular_data=10, mm_fusion="bilinear", 
-                mm_fusion_type="early", n_classes=4, path_input_dim=768, 
+            model = GMCAT(nb_tabular_data=10, mm_fusion=j, 
+                mm_fusion_type=i, n_classes=4, path_input_dim=768, 
                 dim=64, depth=5, mha_heads=4, 
                 mlp_dim=64, pool = 'cls', dim_head = 16, 
-                drop_out = 0.2
+                drop_out = 0.0
                 )
-            a = torch.randn((2, 768))
-            b = torch.randn((1, 10))
             out = model(x_path=a, x_tabular=b, return_feats=False)
-            print(i, j, out.shape)
+            print(i, j, out)
+            
+    for i in ["early", "late"]:
+        for j in ["adaptive", "multiply", "concat", "bilinear"]:
+            model = GMCAT(nb_tabular_data=10, mm_fusion=j, 
+                mm_fusion_type=i, n_classes=4, path_input_dim=768, 
+                dim=64, depth=5, mha_heads=4, 
+                mlp_dim=64, pool = 'cls', dim_head = 16, 
+                drop_out = 0.0
+                )
+            out = model(x_path=a, x_tabular=b, return_feats=False)
+            print(i, j, out)
+            

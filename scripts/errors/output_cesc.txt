@@ -1,0 +1,49 @@
+Loaded cnv data (shape: (282, 24769), missing values: False)
+Train set shape: (227, 24765), test set shape: (55, 24765)
+
+Train survival times:
+count    227.000000
+mean      34.266696
+std       36.743729
+min        0.070000
+25%       12.810000
+50%       21.420000
+75%       42.425000
+max      210.510000
+Name: survival_months, dtype: float64
+
+Test survival times:
+count     55.000000
+mean      35.949455
+std       37.822622
+min        0.490000
+25%       17.065000
+50%       23.950000
+75%       47.585000
+max      209.430000
+Name: survival_months, dtype: float64
+	**Initial shape:  (227, 24765)
+	**After variance threshold:  (227, 24765)
+
+Normalization:
+> Before min: -2.0000 | max: 2.0000
+> After min: -4.5381 | max: 4.1951
+
+
+	**After collinearity elimination:  (227, 69)
+	**After log-rank test:  (227, 0)
+Removed 0+24696+69=24765 features. Remaining: 0
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/fs.py", line 74, in <module>
+    feature_importance_df = feature_importance(X_train, y_train)
+  File "/media/nfs/Desktop/OViTANet/utils/fs_utils.py", line 191, in feature_importance
+    shap_values = explainer(X)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/explainers/_exact.py", line 75, in __call__
+    return super().__call__(
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/explainers/_explainer.py", line 266, in __call__
+    row_result = self.explain_row(
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/explainers/_exact.py", line 170, in explain_row
+    main_effect_values = fm.main_effects(inds)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/utils/_masked_model.py", line 249, in main_effects
+    masks[0] = MaskedModel.delta_mask_noop_value
+IndexError: index 0 is out of bounds for axis 0 with size 0

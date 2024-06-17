@@ -91,27 +91,36 @@ class BilinearFusion(nn.Module):
         return out
     
 class SimpleFusion(nn.Module):
-    def __init__(self, mm_fusion, dim):
+    def __init__(self, mm_fusion, dim, nb_of_vectors=2):
         super().__init__()
         self.mm_fusion = mm_fusion
         if self.mm_fusion == "adaptive":
-            self.tab_weights = nn.Parameter(torch.ones(dim))
-            self.img_weights = nn.Parameter(torch.ones(dim))
+            self.weights = nn.ParameterList([nn.Parameter(torch.ones(dim)) for _ in range(nb_of_vectors)])
 
         if self.mm_fusion == "bilinear":
             self.fuser = BilinearFusion(skip=1,use_bilinear=1, dim1=dim, dim2=dim, scale_dim1=4, scale_dim2=4, gate1=1, gate2=1, mmhid=dim)
             
-    def forward(self, img, tab):
+    def forward(self, v):
         if self.mm_fusion == "concat":
-            img = torch.cat((img, tab), dim=1)
+            v = torch.cat(v, dim=1)
         elif self.mm_fusion == "adaptive":
-            img = tab * self.tab_weights + self.img_weights * img
+            out = torch.zeros_like(v[0])
+            for i in range(len(v)):
+                out = out + self.weights[i] * v[i]
+            v = out
         elif self.mm_fusion == "multiply":
-            img = torch.mul(tab, img)
+            out = torch.ones_like(v[0])
+            for i in range(len(v)):
+                out = torch.mul(out, v[i])
+            v = out
         elif self.mm_fusion == "bilinear":
-            img = self.fuser(img, tab)
-        return img
-
+            out = self.fuser(v[0], v[1])
+            if len(v) > 2:
+                for i in range(2, len(v)):
+                    out = self.fuser(out, v[i])
+            v = out
+        return v
+        
 
 class Gated_Attention(nn.Module):
     def __init__(self, dim=1024, out_dim=1024, dropout=0.25):
@@ -241,7 +250,7 @@ class Transformer(nn.Module):
                 fusion = True
             if fusion:
                 if self.fuser is not None:
-                    x = self.fuser(x, tab)
+                    x = self.fuser([x, tab])
                 att_out = attn(x, tab=tab if self.mm_fusion =="crossatt" else None, return_weights=return_weights)
             else:
                 att_out = attn(x, tab=None, return_weights=return_weights)

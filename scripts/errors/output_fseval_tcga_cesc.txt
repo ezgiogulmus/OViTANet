@@ -1,0 +1,25 @@
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/main.py", line 256, in <module>
+    from datasets.dataset_survival import MIL_Survival_Dataset
+  File "/media/nfs/Desktop/OViTANet/datasets/dataset_survival.py", line 11, in <module>
+    from scipy import stats
+  File "<frozen importlib._bootstrap>", line 1075, in _handle_fromlist
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/scipy/__init__.py", line 134, in __getattr__
+    return _importlib.import_module(f'scipy.{name}')
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/scipy/stats/__init__.py", line 609, in <module>
+    from ._morestats import *
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/scipy/stats/_morestats.py", line 2047, in <module>
+    _get_As_weibull = interpolate.interp1d(_cvals_weibull, _Avals_weibull.T,
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/scipy/interpolate/_interpolate.py", line 543, in __init__
+    self._y = self._reshape_yi(self.y)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/scipy/interpolate/_polyint.py", line 108, in _reshape_yi
+    yi = np.moveaxis(np.asarray(yi), self._y_axis, 0)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/numpy/core/numeric.py", line 1449, in moveaxis
+    source = normalize_axis_tuple(source, a.ndim, 'source')
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/numpy/core/numeric.py", line 1380, in normalize_axis_tuple
+    axis = tuple([normalize_axis_index(ax, ndim, argname) for ax in axis])
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/numpy/core/numeric.py", line 1380, in <listcomp>
+    axis = tuple([normalize_axis_index(ax, ndim, argname) for ax in axis])
+KeyboardInterrupt

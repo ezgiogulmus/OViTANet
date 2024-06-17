@@ -50,6 +50,7 @@ def main(args=None):
 	dataset = MIL_Survival_Dataset(
 		df=df,
 		data_dir= args.feats_dir,
+		separate_branches=args.separate_branches,
 		mode= args.mode,
 		print_info = True,
 		n_bins=args.n_classes,
@@ -141,6 +142,7 @@ def setup_argparse():
 	############ Multi-modal Parameters
 	parser.add_argument('--path_input_dim', type=int, default=768)
 	parser.add_argument('--omics', default=None)
+	parser.add_argument('--separate_branches',     	 action='store_true', default=False)
 	parser.add_argument('--selected_features',     	 action='store_true', default=False)
 	parser.add_argument('--mode',            type=str, choices=['omic', 'path', 'pathomic', 'cluster', 'coattn'], default='coattn', help='Specifies which modalities to use / collate function in dataloader.')
 	parser.add_argument('--fusion',        type=str, choices=["crossatt", "concat", "adaptive", "multiply", "bilinear", None], default=None)
@@ -178,7 +180,7 @@ def setup_argparse():
 	parser.add_argument('--opt',             type=str, choices = ['adam', 'sgd'], default='adam')
 	parser.add_argument('--batch_size',      type=int, default=1, help='Batch Size (Default: 1, due to varying bag sizes)')
 	parser.add_argument('--gc',              type=int, default=32, help='Gradient Accumulation Step.')
-	parser.add_argument('--max_epochs',      type=int, default=20, help='Maximum number of epochs to train (default: 20)')
+	parser.add_argument('--max_epochs',      type=int, default=30, help='Maximum number of epochs to train (default: 20)')
 	parser.add_argument('--lr',				 type=float, default=2e-4, help='Learning rate (default: 0.0001)')
 	parser.add_argument('--reg', 			 type=float, default=1e-5, help='L2-regularization weight decay (default: 1e-5)')
 	parser.add_argument('--reg_type',        type=str, choices=['None', 'omic', 'pathomic'], default='None', help='Which network submodules to apply L1-Regularization (default: None)')

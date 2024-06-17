@@ -1,0 +1,172 @@
+Loaded cnv data (shape: (282, 24769), missing values: False)
+Train set shape: (227, 24765), test set shape: (55, 24765)
+
+Train survival times:
+count    227.000000
+mean      34.266696
+std       36.743729
+min        0.070000
+25%       12.810000
+50%       21.420000
+75%       42.425000
+max      210.510000
+Name: survival_months, dtype: float64
+
+Test survival times:
+count     55.000000
+mean      35.949455
+std       37.822622
+min        0.490000
+25%       17.065000
+50%       23.950000
+75%       47.585000
+max      209.430000
+Name: survival_months, dtype: float64
+	**Initial shape:  (227, 24765)
+	**After variance threshold:  (227, 24765)
+
+Normalization:
+> Before min: -2.0000 | max: 2.0000
+> After min: -4.5381 | max: 4.1951
+
+
+	**After collinearity elimination:  (227, 69)
+	**After log-rank test:  (227, 0)
+Removed 0+24696+69=24765 features. Remaining: 0
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/fs.py", line 70, in <module>
+    feature_importance_df = feature_importance(X_train, y_train)
+  File "/media/nfs/Desktop/OViTANet/utils/fs_utils.py", line 197, in feature_importance
+    explainer = shap.Explainer(cph.predict_partial_hazard, X, max_evals=2 * X.shape[1] + 1)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/explainers/_explainer.py", line 179, in __init__
+    explainers.ExactExplainer.__init__(self, self.model, self.masker, link=self.link, feature_names=self.feature_names, linearize_link=linearize_link, **kwargs)
+TypeError: ExactExplainer.__init__() got an unexpected keyword argument 'max_evals'
+Loaded cnv data (shape: (244, 24769), missing values: False)
+Train set shape: (194, 24765), test set shape: (50, 24765)
+
+Train survival times:
+count    194.000000
+mean      34.013918
+std       39.661187
+min        0.070000
+25%       11.295000
+50%       20.370000
+75%       42.535000
+max      210.510000
+Name: survival_months, dtype: float64
+
+Test survival times:
+count     50.000000
+mean      29.086800
+std       28.534165
+min        0.070000
+25%       10.387500
+50%       19.480000
+75%       40.650000
+max      154.200000
+Name: survival_months, dtype: float64
+	**Initial shape:  (194, 24765)
+	**After variance threshold:  (194, 24765)
+
+Normalization:
+> Before min: -2.0000 | max: 2.0000
+> After min: -4.7455 | max: 4.3534
+
+
+	**After collinearity elimination:  (194, 64)
+	**After log-rank test:  (194, 2)
+Removed 0+24701+62=24763 features. Remaining: 2
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/fs.py", line 70, in <module>
+    feature_importance_df = feature_importance(X_train, y_train)
+  File "/media/nfs/Desktop/OViTANet/utils/fs_utils.py", line 197, in feature_importance
+    explainer = shap.Explainer(cph.predict_partial_hazard, X, max_evals=2 * X.shape[1] + 1)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/explainers/_explainer.py", line 179, in __init__
+    explainers.ExactExplainer.__init__(self, self.model, self.masker, link=self.link, feature_names=self.feature_names, linearize_link=linearize_link, **kwargs)
+TypeError: ExactExplainer.__init__() got an unexpected keyword argument 'max_evals'
+Loaded cnv data (shape: (1064, 24769), missing values: False)
+Train set shape: (853, 24765), test set shape: (211, 24765)
+
+Train survival times:
+count    853.000000
+mean      40.858535
+std       37.529748
+min        0.030000
+25%       15.050000
+50%       28.190000
+75%       55.580000
+max      282.690000
+Name: survival_months, dtype: float64
+
+Test survival times:
+count    211.000000
+mean      44.263128
+std       46.135868
+min        0.030000
+25%       15.570000
+50%       28.420000
+75%       55.600000
+max      281.080000
+Name: survival_months, dtype: float64
+	**Initial shape:  (853, 24765)
+	**After variance threshold:  (853, 24765)
+
+Normalization:
+> Before min: -2.0000 | max: 2.0000
+> After min: -4.5484 | max: 4.9623
+
+
+	**After collinearity elimination:  (853, 112)
+	**After log-rank test:  (853, 5)
+Removed 0+24653+107=24760 features. Remaining: 5
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/fs.py", line 70, in <module>
+    feature_importance_df = feature_importance(X_train, y_train)
+  File "/media/nfs/Desktop/OViTANet/utils/fs_utils.py", line 197, in feature_importance
+    explainer = shap.Explainer(cph.predict_partial_hazard, X, max_evals=2 * X.shape[1] + 1)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/explainers/_explainer.py", line 179, in __init__
+    explainers.ExactExplainer.__init__(self, self.model, self.masker, link=self.link, feature_names=self.feature_names, linearize_link=linearize_link, **kwargs)
+TypeError: ExactExplainer.__init__() got an unexpected keyword argument 'max_evals'
+Loaded cnv data (shape: (973, 24769), missing values: False)
+Train set shape: (779, 24765), test set shape: (194, 24765)
+
+Train survival times:
+count    779.000000
+mean      37.986162
+std       36.340021
+min        0.030000
+25%       14.420000
+50%       25.000000
+75%       50.710000
+max      281.080000
+Name: survival_months, dtype: float64
+
+Test survival times:
+count    194.000000
+mean      36.508660
+std       32.466546
+min        0.030000
+25%       14.317500
+50%       24.785000
+75%       50.100000
+max      165.640000
+Name: survival_months, dtype: float64
+	**Initial shape:  (779, 24765)
+	**After variance threshold:  (779, 24765)
+
+Normalization:
+> Before min: -2.0000 | max: 2.0000
+> After min: -4.6893 | max: 4.8748
+
+
+	**After collinearity elimination:  (779, 108)
+	**After log-rank test:  (779, 4)
+Removed 0+24657+104=24761 features. Remaining: 4
+Traceback (most recent call last):
+  File "/media/nfs/Desktop/OViTANet/fs.py", line 70, in <module>
+    feature_importance_df = feature_importance(X_train, y_train)
+  File "/media/nfs/Desktop/OViTANet/utils/fs_utils.py", line 197, in feature_importance
+    explainer = shap.Explainer(cph.predict_partial_hazard, X, max_evals=2 * X.shape[1] + 1)
+  File "/home/ezgitwo/miniconda3/envs/surv/lib/python3.10/site-packages/shap/explainers/_explainer.py", line 179, in __init__
+    explainers.ExactExplainer.__init__(self, self.model, self.masker, link=self.link, feature_names=self.feature_names, linearize_link=linearize_link, **kwargs)
+TypeError: ExactExplainer.__init__() got an unexpected keyword argument 'max_evals'

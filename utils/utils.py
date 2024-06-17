@@ -15,8 +15,8 @@ device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def get_data(args):
 	df = pd.read_csv(args.csv_path, compression="zip" if ".zip" in args.csv_path else None)
-	
 	indep_vars = []
+	args.nb_tabular_data = 0
 	if args.omics not in ["None", "none", None]:
 		print("Selected omics variables:")
 		if args.selected_features:
@@ -39,7 +39,12 @@ def get_data(args):
 					print("\t", g, gen_df.shape[1]-1)
 					df = pd.merge(df, gen_df, on='case_id', how="outer")
 			df = df.reset_index(drop=True).drop(df.index[df["event"].isna()]).reset_index(drop=True)
-	args.nb_tabular_data = len(indep_vars)
+		args.nb_tabular_data = len(indep_vars)
+		if args.separate_branches:
+			args.nb_tabular_data = []
+			gen_types = np.unique([i[-3:] for i in indep_vars])
+			for g in gen_types:
+				args.nb_tabular_data.append(len([col for col in indep_vars if col[-3:]==g]))
 	
 	print("Total number of cases: {} | slides: {}" .format(len(df["case_id"].unique()), len(df)))
 	return df, indep_vars
@@ -59,6 +64,15 @@ class SubsetSequentialSampler(Sampler):
 
 	def __len__(self):
 		return len(self.indices)
+	
+def collate_MIL_separate(batch):
+	img = torch.cat([item[0] for item in batch], dim = 0)	
+	label = torch.cat([item[1] for item in batch], dim = 0).type(torch.LongTensor)
+	event_time = torch.FloatTensor([item[2] for item in batch])
+	c = torch.FloatTensor([item[3] for item in batch])
+	tabular = [torch.cat([item[4][i] for item in batch], dim=0) for i in range(len(batch[0][4]))]
+	case_id = np.array([item[5] for item in batch])
+	return [img, label, event_time, c, tabular, case_id]
 
 def collate_MIL_survival(batch):
 	img = torch.cat([item[0] for item in batch], dim = 0)	
@@ -81,12 +95,12 @@ def get_simple_loader(dataset, batch_size=1):
 	loader = DataLoader(dataset, batch_size=batch_size, sampler = sampler.SequentialSampler(dataset), collate_fn = collate_MIL, **kwargs)
 	return loader 
 
-def get_split_loader(split_dataset, training = False, weighted = False, batch_size=1):
+def get_split_loader(split_dataset, training = False, weighted = False, batch_size=1, separate_branches=False):
 	"""
 		return either the validation loader or training loader 
 	"""
 	
-	collate = collate_MIL_survival
+	collate = collate_MIL_separate if separate_branches else collate_MIL_survival
 
 	kwargs = {'num_workers': 4} if device.type == "cuda" else {}
 	
@@ -112,6 +126,8 @@ def model_builder(args, ckpt_path=None, print_model=False):
 	"nb_tabular_data": args.nb_tabular_data,
 	"mm_fusion": args.fusion,
 	"mm_fusion_type": args.fusion_location,
+	"separate_branches": args.separate_branches,
+	"nb_of_omics": len(args.omics.split(",")),
 	"path_input_dim": args.path_input_dim,
 	"depth": args.depth, 
 	"mha_heads": args.mha_heads,

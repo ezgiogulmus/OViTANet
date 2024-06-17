@@ -21,9 +21,12 @@ parser.add_argument('--verbose', action="store_true", default=False)
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    np.random.seed(args.seed)
     args.results_dir = os.path.join(args.results_dir, args.data_name)
     os.makedirs(args.results_dir, exist_ok=True)
+    if os.path.isfile(os.path.join(args.results_dir, f'fs_{args.target_data}.xlsx')):
+        print(f"Results already exist for {args.target_data}.")
+        sys.exit(0)
+    np.random.seed(args.seed)
     saving_dict = {}
 
     # Prepare the data
@@ -64,7 +67,7 @@ if __name__ == "__main__":
     removed_df.to_csv(os.path.join(args.results_dir, f"tmp_filtering_{args.target_data}.csv"))
 
     pd.concat([X_train, y_train], axis=1).to_csv(os.path.join(args.results_dir, f"tmp_data_{args.target_data}.csv"))
-    if args.only_filtering:
+    if args.only_filtering or X_train.shape[1] == 0:
         sys.exit(0)
     
     # Calculate SHAP scores

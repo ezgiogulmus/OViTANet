@@ -28,6 +28,7 @@ class Generic_WSI_Survival_Dataset(Dataset):
 		"""
 		self.print_info = print_info
 		self.data_dir = None
+		self.separate_branches = None
 		self.num_intervals = n_bins
 		self.mode = mode
 		
@@ -104,14 +105,14 @@ class Generic_WSI_Survival_Dataset(Dataset):
 
 	def get_split_from_df(self, all_splits=None, split_key='train', scaler=None):
 		if split_key == 'all':
-			return Generic_Split(self.slide_data, self.time_breaks, self.indep_vars, self.mode, self.data_dir, patient_dict=self.patient_dict, print_info=self.print_info, num_classes=self.num_classes)
+			return Generic_Split(self.slide_data, self.time_breaks, self.indep_vars, self.mode, self.data_dir, self.separate_branches, patient_dict=self.patient_dict, print_info=self.print_info, num_classes=self.num_classes)
 		split = all_splits[split_key]
 		split = split.dropna().reset_index(drop=True)
 
 		if len(split) > 0:
 			mask = self.slide_data['slide_id'].isin(split.tolist())
 			df_slice = self.slide_data[mask].reset_index(drop=True)
-			split = Generic_Split(df_slice, self.time_breaks, self.indep_vars, self.mode, self.data_dir, patient_dict=self.patient_dict, print_info=self.print_info, num_classes=self.num_classes)
+			split = Generic_Split(df_slice, self.time_breaks, self.indep_vars, self.mode, self.data_dir, self.separate_branches, patient_dict=self.patient_dict, print_info=self.print_info, num_classes=self.num_classes)
 		else:
 			split = None
 		
@@ -162,9 +163,10 @@ class Generic_WSI_Survival_Dataset(Dataset):
 
 
 class MIL_Survival_Dataset(Generic_WSI_Survival_Dataset):
-	def __init__(self, data_dir, **kwargs):
+	def __init__(self, data_dir, separate_branches, **kwargs):
 		super(MIL_Survival_Dataset, self).__init__(**kwargs)
 		self.data_dir = data_dir
+		self.separate_branches = separate_branches
 
 	def __getitem__(self, idx):
 		
@@ -175,8 +177,18 @@ class MIL_Survival_Dataset(Generic_WSI_Survival_Dataset):
 		label = torch.Tensor([self.slide_data['disc_label'][idx]])
 		slide_ids = self.patient_dict[case_id]
 		
-		tabular_data = self.slide_data[self.indep_vars].iloc[idx].values
-		tab_tensor = torch.tensor(tabular_data[np.newaxis, :]) if len(tabular_data) > 0 else torch.tensor(np.zeros((1, 1)))
+		if len(self.indep_vars) == 0:
+			tab_tensor = torch.tensor(np.zeros((1, 1)))
+		elif self.separate_branches:
+			gen_types = np.unique([i[-3:] for i in self.indep_vars])
+			tab_data = []
+			for g in gen_types:
+				tab_data.append(self.slide_data[[col for col in self.indep_vars if col[-3:]==g]].values)
+			tab_tensor = [torch.tensor(i[np.newaxis, :]) for i in tab_data]
+		else:
+			tabular_data = self.slide_data[self.indep_vars].iloc[idx].values
+			tab_tensor = torch.tensor(tabular_data[np.newaxis, :]) if len(tabular_data) > 0 else torch.tensor(np.zeros((1, 1)))
+		
 		
 		if "path" in self.mode:
 			path_features = []
@@ -192,7 +204,7 @@ class MIL_Survival_Dataset(Generic_WSI_Survival_Dataset):
 
 class Generic_Split(MIL_Survival_Dataset):
 	def __init__(self, slide_data, time_breaks, indep_vars,
-	mode, data_dir=None, patient_dict=None, print_info=False, num_classes=4):
+	mode, data_dir=None, separate_branches=False, patient_dict=None, print_info=False, num_classes=4):
 		"""
 		Args:
 			slide_data (DataFrame): Data for the current split.
@@ -202,6 +214,7 @@ class Generic_Split(MIL_Survival_Dataset):
 		"""
 		self.slide_data = slide_data
 		self.data_dir = data_dir
+		self.separate_branches = separate_branches
 		self.patient_dict = patient_dict
 		self.time_breaks = time_breaks
 		self.print_info = print_info

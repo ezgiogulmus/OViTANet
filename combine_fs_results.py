@@ -22,7 +22,9 @@ if __name__ == "__main__":
         overall_results[target_data] = {"Total": len(genetic_df.columns[1:])}
 
         excel_file = os.path.join(args.results_dir, args.data_name, f'fs_{target_data}.xlsx')
-        assert os.path.isfile(excel_file), f"File does not exist"
+        if not os.path.isfile(excel_file): 
+            print(f"File {excel_file} does not exist")
+            continue
         removed_df = pd.read_excel(excel_file, sheet_name="Filtering", engine="openpyxl")
         overall_results[target_data].update({col: len(removed_df[col].dropna().values) for col in removed_df.columns[1:]})
         

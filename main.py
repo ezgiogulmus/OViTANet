@@ -103,27 +103,10 @@ def main(args=None):
 
 
 def setup_argparse():
-	### Data 
-	parser = argparse.ArgumentParser(description='Configurations for Survival Analysis on TCGA Data.')
 	
-	### OViT params
-	parser.add_argument('--wandb',		 action='store_true', default=False)
-	parser.add_argument('--mm_fusion',        type=str, choices=["crossatt", "concat", "adaptive", "multiply", "bilinear", "lrbilinear", None], default=None)
-	parser.add_argument('--mm_fusion_type',   type=str, choices=["early", "mid", "late", None], default=None)
+	parser = argparse.ArgumentParser(description='Configurations for Multi-Modal Survival Analysis.')
 
-	parser.add_argument('--target_dim', type=int, default=50)
-
-	parser.add_argument("--mlp_type", default="big", choices=["tiny", "small", "big"])
-	parser.add_argument("--activation", default="relu", choices=["relu", "leakyrelu", "gelu"])
-	parser.add_argument("--mlp_skip", default=True, action="store_false")
-
-	parser.add_argument("--depth", default=5, type=int)
-	parser.add_argument("--mha_heads", default=4, type=int)
-	parser.add_argument("--model_dim", default=None, help="to decrease nb of patch features")
-	parser.add_argument("--mlp_dim", default=64, type=int, help="Hidden dim during FeedForward")
-	parser.add_argument("--dim_head", default=32, type=int, help="inner_dim = dim_head * heads")
-	parser.add_argument("--pool", default="cls", choices=["cls", "mean"])
-
+	### Data 
 	parser.add_argument('--data_name',   type=str, default=None)
 	parser.add_argument('--feats_dir',   type=str, default=None)
 	parser.add_argument('--dataset_dir', type=str, default="./datasets_csv")
@@ -139,9 +122,10 @@ def setup_argparse():
 	parser.add_argument('--k_end',			 type=int, default=-1, help='End fold (Default: -1, first fold)')
 	parser.add_argument('--log_data',        action='store_true', default=True, help='Log data using tensorboard')
 	parser.add_argument('--overwrite',     	 action='store_true', default=False, help='Whether or not to overwrite experiments (if already ran)')
+	parser.add_argument('--wandb',		 action='store_true', default=False)
 
 	### Model Parameters
-	parser.add_argument('--model_type', type=str, choices=["mlp", "vit", "ssm", 'clam_sb', 'clam_mb', 'mil', "transmil", 'snn', 'deepset', 'amil', 'mcat', "motcat", "porpmmf", "porpamil"], default='clam_sb',  help='type of model (default: clam_sb, clam w/ single attention branch)')
+	parser.add_argument('--model_type', type=str, choices=["gmcat", "mlp", "vit", "ssm", 'clam_sb', 'clam_mb', 'mil', "transmil", 'snn', 'deepset', 'amil', 'mcat', "motcat", "porpmmf", "porpamil"], default='clam_sb',  help='type of model (default: clam_sb, clam w/ single attention branch)')
 	parser.add_argument('--model_size', type=str, choices=['small', 'big'], default='small', help='size of model, does not affect mil')
 	parser.add_argument('--drop_out',        default=.25, type=float, help='Enable dropout (p=0.25)')
 	parser.add_argument('--n_classes', type=int, default=4)
@@ -155,10 +139,12 @@ def setup_argparse():
 	parser.add_argument('--B', type=int, default=8, help='numbr of positive/negative patches to sample for clam')
 
 	############ Multi-modal Parameters
+	parser.add_argument('--path_input_dim', type=int, default=768)
 	parser.add_argument('--omics', default=None)
 	parser.add_argument('--selected_features',     	 action='store_true', default=False)
 	parser.add_argument('--mode',            type=str, choices=['omic', 'path', 'pathomic', 'cluster', 'coattn'], default='coattn', help='Specifies which modalities to use / collate function in dataloader.')
-	parser.add_argument('--fusion',          type=str, choices=['None', 'concat', 'bilinear'], default='concat', help='Type of fusion. (Default: concat).')
+	parser.add_argument('--fusion',        type=str, choices=["crossatt", "concat", "adaptive", "multiply", "bilinear", None], default=None)
+	parser.add_argument('--fusion_location',   type=str, choices=["early", "mid", "ms", "late", None], default=None)
 	parser.add_argument('--apply_sig',		 action='store_true', default=False, help='Use genomic features as signature embeddings.')
 	parser.add_argument('--model_size_wsi',  type=str, default='small', help='Network size of AMIL model')
 	parser.add_argument('--model_size_omic', type=str, default='small', help='Network size of SNN model')
@@ -177,6 +163,16 @@ def setup_argparse():
 	parser.add_argument('--skip', action='store_true', default=False)
 	parser.add_argument('--dropinput', type=float, default=0.0)
 	parser.add_argument('--use_mlp', action='store_true', default=False)
+
+	# ViT params
+	parser.add_argument("--depth", default=5, type=int)
+	parser.add_argument("--mha_heads", default=4, type=int)
+	parser.add_argument("--dim_head", default=16, type=int, help="inner_dim = dim_head * heads")
+
+	# MLP params
+	parser.add_argument("--activation", default="relu", choices=["relu", "leakyrelu", "gelu"])
+	parser.add_argument("--mlp_type", default="big", choices=["small", "big"])
+	parser.add_argument("--mlp_skip", default=True, action="store_false")
 
 	### Training Parameters
 	parser.add_argument('--opt',             type=str, choices = ['adam', 'sgd'], default='adam')

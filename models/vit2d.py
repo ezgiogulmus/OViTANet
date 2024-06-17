@@ -1,15 +1,7 @@
 import torch
 from torch import nn
-
-from models.model_utils import BilinearFusion, LRBilinearFusion
+from models.model_utils import BilinearFusion
 from models.mlp_model import MLP
-
-# from model_utils import BilinearFusion, LRBilinearFusion
-# from mlp_model import MLP
-
-def pair(t):
-    return t if isinstance(t, tuple) else (t, t)
-
 
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout = 0.):
@@ -25,79 +17,6 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-
-
-# class Attention(nn.Module):
-#     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0., augmented_dim=128):
-#         super().__init__()
-#         self.img_gate = nn.Sequential(
-#             # nn.Linear(dim, augmented_dim),
-#             # nn.ReLU(),
-#             # nn.Linear(augmented_dim, dim),
-#             nn.Tanh(),
-#             nn.LayerNorm(dim)
-#         )
-        
-#         self.tab_gate = nn.Sequential(
-#             # nn.Linear(dim, augmented_dim),
-#             # nn.ReLU(),
-#             # nn.Linear(augmented_dim, dim),
-#             nn.Sigmoid(),
-#             nn.LayerNorm(dim)
-#         )
-#         inner_dim = dim_head *  heads
-#         project_out = not (heads == 1 and dim_head == dim)
-
-#         self.heads = heads
-#         self.scale = dim_head ** -0.5
-#         self.dim_head = dim_head
-
-#         # self.norm = nn.LayerNorm(dim)
-
-#         self.attend = nn.Softmax(dim = -1)
-#         self.dropout = nn.Dropout(dropout)
-
-#         self.img_to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
-#         self.tab_to_kv = nn.Linear(dim, inner_dim * 2, bias = False)
-
-#         self.to_out = nn.Sequential(
-#             nn.Linear(inner_dim, dim),
-#             nn.Dropout(dropout)
-#         ) if project_out else nn.Identity()
-
-#     def forward(self, img, tab=None, return_weights=False):
-#         img = self.img_gate(img)
-
-#         qkv = self.img_to_qkv(img).chunk(3, dim = -1)
-#         # print("QKV", qkv[0].shape)
-#         b, n = qkv[0].size(0), qkv[0].size(1)
-#         q, k, v = map(lambda t: t.view(b, n, self.heads, self.dim_head).transpose(1, 2), qkv)
-        
-#         if tab is not None:
-#             tab = self.tab_gate(tab)
-#             kv_tab = self.tab_to_kv(tab).chunk(2, dim = -1)
-#             k_tab, v_tab = map(lambda t: t.view(b, 1, self.heads, self.dim_head).transpose(1, 2), kv_tab)
-#             k = torch.cat([k, k_tab], dim=2)
-#             v = torch.cat([v, v_tab], dim=2)
-#             # k = torch.cat([self.img_scale * k, self.tab_scale * k_tab], dim=2)
-#             # v = torch.cat([self.img_scale * v, self.tab_scale * v_tab], dim=2)
-    
-#         # print("k", k.shape, k.mean(), k.max()) # (1, H, nb_patches+1, dim_head)
-#         # print("q", q.shape, q.mean(), q.max())
-#         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
-#         # print("dots", dots.shape, dots.mean(), dots.max())
-#         attn = self.attend(dots)
-        
-#         # dropped_attn = self.dropout(attn)
-#         # print("d", dots.shape, attn.shape, v.shape) # (1, H, nb_patches+1,  nb_patches+1)
-#         out = torch.matmul(attn, v)
-#         # print(out.shape) # (1, H, nb_patches+1, dim_head)
-#         out = out.transpose(1, 2).reshape(b, n, self.heads * self.dim_head)
-        
-#         out = self.to_out(out)
-#         if not return_weights:
-#             return out
-#         return out, attn#.transpose(1, 2).reshape(b, n, -1)
 
 
 class Attention(nn.Module):
@@ -127,7 +46,6 @@ class Attention(nn.Module):
         img = self.norm(img)
 
         qkv = self.to_qkv(img).chunk(3, dim = -1)
-        # print("QKV", qkv[0].shape)
         b, n = qkv[0].size(0), qkv[0].size(1)
         q, k, v = map(lambda t: t.view(b, n, self.heads, self.dim_head).transpose(1, 2), qkv)
         
@@ -137,14 +55,11 @@ class Attention(nn.Module):
             _, k_tab, v_tab = map(lambda t: t.view(b, 1, self.heads, self.dim_head).transpose(1, 2), qkv_tab)
             k = torch.cat([k, k_tab], dim=2)
             v = torch.cat([v, v_tab], dim=2)
-        # print("k", k.shape, q.shape, k_tab.shape)
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
         
         attn = self.attend(dots)
         dropped_attn = self.dropout(attn)
-        # print("d", dots.shape, attn.shape, v.shape)
         out = torch.matmul(dropped_attn, v)
-        # print(out.shape)
         out = out.transpose(1, 2).reshape(b, n, self.heads * self.dim_head)
         
         out = self.to_out(out)
@@ -201,7 +116,7 @@ class ViT(nn.Module):
         mm_fusion_type="late", n_classes=4, path_input_dim=768, 
         target_features=50, depth=5, mha_heads=4, 
         model_dim=None, mlp_dim=64, pool = 'cls', dim_head = 16, 
-        drop_out = 0.2, emb_dropout = 0.5, mlp_type="tiny", **kwargs
+        drop_out = 0.2, emb_dropout = 0.5, **kwargs
         ):
         super().__init__()
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
@@ -228,16 +143,13 @@ class ViT(nn.Module):
         target_tab_features = target_features if self.mm_fusion_type == "late" else self.model_dim
 
         if nb_tabular_data > 0:
-            if mlp_type == "tiny":
-                self.tabular_emb = nn.Linear(nb_tabular_data, target_tab_features)
-            else:
-                self.tabular_emb = MLP(
-                    nb_tabular_data, 
-                    drop_out=drop_out,
-                    target_features=target_tab_features, 
-                    feat_extractor=True,
-                    mlp_type=mlp_type,
-                    **kwargs)
+            self.tabular_emb = MLP(
+                nb_tabular_data, 
+                drop_out=drop_out,
+                target_features=target_tab_features, 
+                feat_extractor=True,
+                **kwargs
+            )
 
         self.transformer = Transformer(self.model_dim, depth, mha_heads, dim_head, mlp_dim, drop_out, mm_fusion=None if self.mm_fusion_type != "mid" else mm_fusion)
         self.to_feats = nn.Linear(self.model_dim, target_features)
@@ -256,8 +168,6 @@ class ViT(nn.Module):
                     target_features *= 2
 
         self.mlp_head = nn.Sequential(
-            # nn.ReLU(),
-            # nn.Dropout(drop_out),
             nn.Linear(target_features, n_classes)
         )
         initialize_weights(self)

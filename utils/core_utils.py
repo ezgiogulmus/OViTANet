@@ -7,9 +7,6 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, RandomSampler
 
-from models.mil_model import MIL_fc_mc
-from models.vit2d import ViT
-from models.mlp_model import MLP
 from utils.utils import *
 from utils.loss_func import CoxSurvLoss, NLLSurvLoss
 
@@ -64,45 +61,7 @@ class EarlyStopping:
 
 def init_model(args, ckpt_path=None, print_model=False):
 	# Model, optimizer and loss
-
-	model_dict = {
-		"target_features": args.target_dim,
-		"n_classes": args.n_classes if args.surv_model == "discrete" else 1,
-		"drop_out": args.drop_out,
-		"mlp_type": args.mlp_type,
-		"activation": args.activation,
-		"skip": args.mlp_skip,
-		"batch_norm": True if args.batch_size > 1 else False
-		}
-	
-	if "path" not in args.mode:
-		model = MLP(input_dim=args.nb_tabular_data, **model_dict)
-	else:
-		model_dict.update({
-			"nb_tabular_data": args.nb_tabular_data,
-			"mm_fusion": args.mm_fusion,
-			"mm_fusion_type": args.mm_fusion_type,
-			"path_input_dim": args.path_input_dim,
-			"depth": args.depth, 
-			"mha_heads": args.mha_heads, 
-			"model_dim": args.model_dim if args.model_dim not in [None, "None", "none"] else None, 
-			"mlp_dim": args.mlp_dim,
-			"dim_head": args.dim_head,
-			"pool": args.pool
-		})
-		print(f"Initiating {args.model_type.upper()} model...")
-		if args.model_type == "vit":
-			model = ViT(**model_dict)
-		elif args.model_type == "mil":
-			model = MIL_fc_mc(**model_dict)
-	
-	if print_model:
-		print_network(model)
-	
-	if ckpt_path:
-		model.load_state_dict(torch.load(ckpt_path))
-	model = model.to(device)
-
+	model = model_builder(args, ckpt_path, print_model)
 	
 	if args.opt == "adam":
 		optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=args.reg)

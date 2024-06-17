@@ -20,10 +20,10 @@ class MLPBlock(nn.Module):
         return self.dropout(self.activation_fn(x))
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, mlp_type="small", activation="relu", drop_out=.25, target_features=50, n_classes=1, skip=True, feat_extractor=False, batch_norm=False):
+    def __init__(self, nb_tabular_data, mlp_type="small", activation="relu", drop_out=.25, target_features=50, n_classes=1, mlp_skip=True, feat_extractor=False, batch_norm=False, **kwargs):
         super(MLP, self).__init__()
 
-        self.skip = skip
+        self.skip = mlp_skip
         self.feat_extractor = feat_extractor
         
         self.activations = {
@@ -34,12 +34,10 @@ class MLP(nn.Module):
         assert activation in self.activations.keys(), "Unknown activation function."
         
         if mlp_type == "small":
-            hidden_dims = [input_dim, 256, 128, target_features]
+            hidden_dims = [nb_tabular_data, 256, 128, target_features]
             self.skip = False
-        # elif mlp_type == "small":
-        #     hidden_dims = [input_dim, 1024, 512, 256, 128, target_features]
         else:
-            hidden_dims = [input_dim, 4096, 2048, 1024, 512, 256, 128, target_features]
+            hidden_dims = [nb_tabular_data, 4096, 2048, 1024, 512, 256, 128, target_features]
                     
         self.blocks = nn.Sequential(*[
             MLPBlock(hidden_dims[i], hidden_dims[i+1], self.activations[activation], drop_out, bn=batch_norm) 

@@ -7,11 +7,11 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler, RandomSampler, SequentialSampler, sampler
-
+from models.mil_model import MIL_fc_mc
+from models.vit2d import ViT
+from models.mlp_model import MLP
+from models.model_gmcat import GMCAT
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-import pandas as pd
-from itertools import chain
 
 def get_data(args):
 	df = pd.read_csv(args.csv_path, compression="zip" if ".zip" in args.csv_path else None)
@@ -101,19 +101,53 @@ def get_split_loader(split_dataset, training = False, weighted = False, batch_si
 
 	return loader
 
-def print_network(net):
-	num_params = 0
-	num_params_train = 0
-	print(net)
+def model_builder(args, ckpt_path=None, print_model=False):
+	model_dict = {
+	"n_classes": args.n_classes if args.surv_model == "discrete" else 1,
+	"drop_out": args.drop_out,
+	"batch_norm": True if args.batch_size > 1 else False,
+	"mlp_type": args.mlp_type,
+	"mlp_skip": args.mlp_skip,
+	"activation": args.activation,
+	"nb_tabular_data": args.nb_tabular_data,
+	"mm_fusion": args.fusion,
+	"mm_fusion_type": args.fusion_location,
+	"path_input_dim": args.path_input_dim,
+	"depth": args.depth, 
+	"mha_heads": args.mha_heads,
+	"dim_head": args.dim_head,
+	}
+	print(f"Initiating {args.model_type.upper()} model...")
 	
-	for param in net.parameters():
-		n = param.numel()
-		num_params += n
-		if param.requires_grad:
-			num_params_train += n
+	if args.model_type == "mlp":
+		model = MLP(**model_dict)
+	elif args.model_type == "mil":
+		model = MIL_fc_mc(**model_dict)
+	elif args.model_type == "vit":
+		model = ViT(**model_dict)
+	elif args.model_type == "gmcat":
+		model = GMCAT(**model_dict)
+	else:
+		raise NotImplementedError
 	
-	print('Total number of parameters: %d' % num_params)
-	print('Total number of trainable parameters: %d' % num_params_train)
+	if print_model:
+		num_params = 0
+		num_params_train = 0
+		print(model)
+		
+		for param in model.parameters():
+			n = param.numel()
+			num_params += n
+			if param.requires_grad:
+				num_params_train += n
+		
+		print('Total number of parameters: %d' % num_params)
+		print('Total number of trainable parameters: %d' % num_params_train)
+	
+	if ckpt_path is not None:
+		model.load_state_dict(torch.load(ckpt_path))
+	model = model.to(device)
+	return model
 
 
 def generate_split(cls_ids, val_num, test_num, samples, n_splits = 5,
@@ -251,14 +285,14 @@ def check_directories(args):
 	
 	args.mode = ("+").join(inputs)
 	if args.mode != "path+tab":
-		args.mm_fusion, args.mm_fusion_type = None, None
+		args.fusion, args.fusion_location = None, None
 	
 	param_code += '_' + args.mode
 
 	if args.omics not in ["None", "none", None]:
 		suffix = ""
 		if args.feats_dir not in [None, "None", "none"]:
-			suffix += "_"+args.mm_fusion_type+","+args.mm_fusion
+			suffix += "_"+args.fusion_location+","+args.fusion
 		suffix += "_"+args.omics
 		if not args.selected_features:
 			suffix += "_all"

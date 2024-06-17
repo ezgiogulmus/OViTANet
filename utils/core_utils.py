@@ -109,10 +109,9 @@ def train(datasets: tuple, cur: int, args: Namespace):
 	print("Training on {} samples".format(len(train_split)))
 	print("Validating on {} samples".format(len(val_split)))
 	print("Testing on {} samples".format(len(test_split)))
-	train_loader = get_split_loader(train_split, training=True, 
-		weighted = args.weighted_sample, batch_size=args.batch_size)
-	val_loader = get_split_loader(val_split, batch_size=args.batch_size)
-	test_loader = get_split_loader(test_split, batch_size=args.batch_size)
+	train_loader = get_split_loader(train_split, training=True, weighted = args.weighted_sample, batch_size=args.batch_size, separate_branches=args.separate_branches)
+	val_loader = get_split_loader(val_split, batch_size=args.batch_size, separate_branches=args.separate_branches)
+	test_loader = get_split_loader(test_split, batch_size=args.batch_size, separate_branches=args.separate_branches)
 
 	model, optimizer, loss_fn, scheduler = init_model(args, print_model=True if cur == 0 else False)
 	if args.early_stopping > 0:
@@ -391,3 +390,4 @@ def eval_model(dataset, results_dir, args, cur, return_feats=True):
 			'cindex': cindex, 
 			"loss": loss
 		}
+

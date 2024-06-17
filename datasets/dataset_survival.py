@@ -183,7 +183,7 @@ class MIL_Survival_Dataset(Generic_WSI_Survival_Dataset):
 			gen_types = np.unique([i[-3:] for i in self.indep_vars])
 			tab_data = []
 			for g in gen_types:
-				tab_data.append(self.slide_data[[col for col in self.indep_vars if col[-3:]==g]].values)
+				tab_data.append(self.slide_data[[col for col in self.indep_vars if col[-3:]==g]].iloc[idx].values)
 			tab_tensor = [torch.tensor(i[np.newaxis, :]) for i in tab_data]
 		else:
 			tabular_data = self.slide_data[self.indep_vars].iloc[idx].values

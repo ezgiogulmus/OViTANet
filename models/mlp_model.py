@@ -80,6 +80,7 @@ class MB_MLP(nn.Module):
         self.feat_extractor = feat_extractor
         self.encoders = nn.ModuleList([MLP(nb_tabular_data[i], feat_extractor=True, target_features=target_features, **kwargs) for i in range(len(nb_tabular_data))])
         self.fuser = SimpleFusion(mm_fusion, target_features, nb_of_vectors=len(nb_tabular_data))
+        
         if mm_fusion == "concat":
             target_features *= len(nb_tabular_data)
         if not feat_extractor:

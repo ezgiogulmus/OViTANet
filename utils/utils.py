@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler, RandomSampler, SequentialSampler, sampler
 from models.mil_model import MIL_fc_mc
 from models.vit2d import ViT
-from models.mlp_model import MLP
+from models.mlp_model import MLP, MB_MLP
 from models.model_gmcat import GMCAT
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -70,7 +70,7 @@ def collate_MIL_separate(batch):
 	label = torch.cat([item[1] for item in batch], dim = 0).type(torch.LongTensor)
 	event_time = torch.FloatTensor([item[2] for item in batch])
 	c = torch.FloatTensor([item[3] for item in batch])
-	tabular = [torch.cat([item[4][i] for item in batch], dim=0) for i in range(len(batch[0][4]))]
+	tabular = [torch.cat([item[4][i] for item in batch], dim=0).type(torch.FloatTensor) for i in range(len(batch[0][4]))]
 	case_id = np.array([item[5] for item in batch])
 	return [img, label, event_time, c, tabular, case_id]
 
@@ -126,7 +126,6 @@ def model_builder(args, ckpt_path=None, print_model=False):
 	"nb_tabular_data": args.nb_tabular_data,
 	"mm_fusion": args.fusion,
 	"mm_fusion_type": args.fusion_location,
-	"separate_branches": args.separate_branches,
 	"nb_of_omics": len(args.omics.split(",")),
 	"path_input_dim": args.path_input_dim,
 	"depth": args.depth, 
@@ -136,7 +135,10 @@ def model_builder(args, ckpt_path=None, print_model=False):
 	print(f"Initiating {args.model_type.upper()} model...")
 	
 	if args.model_type == "mlp":
-		model = MLP(**model_dict)
+		if args.separate_branches:
+			model = MB_MLP(**model_dict)
+		else:
+			model = MLP(**model_dict)
 	elif args.model_type == "mil":
 		model = MIL_fc_mc(**model_dict)
 	elif args.model_type == "vit":
@@ -300,7 +302,7 @@ def check_directories(args):
 		inputs.append("tab")
 	
 	args.mode = ("+").join(inputs)
-	if args.mode != "path+tab":
+	if args.mode != "path+tab" and not args.separate_branches:
 		args.fusion, args.fusion_location = None, None
 	
 	param_code += '_' + args.mode
@@ -309,6 +311,8 @@ def check_directories(args):
 		suffix = ""
 		if args.feats_dir not in [None, "None", "none"]:
 			suffix += "_"+args.fusion_location+","+args.fusion
+		if args.separate_branches:
+			suffix += "_"+args.fusion
 		suffix += "_"+args.omics
 		if not args.selected_features:
 			suffix += "_all"
@@ -319,3 +323,4 @@ def check_directories(args):
 	print("Loading the data from ", args.csv_path)
 	assert os.path.isfile(args.csv_path), f"Data file does not exist > {args.csv_path}"
 	return args
+

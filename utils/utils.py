@@ -45,7 +45,6 @@ def get_data(args):
 			gen_types = np.unique([i[-3:] for i in indep_vars])
 			for g in gen_types:
 				args.nb_tabular_data.append(len([col for col in indep_vars if col[-3:]==g]))
-	
 	print("Total number of cases: {} | slides: {}" .format(len(df["case_id"].unique()), len(df)))
 	return df, indep_vars
 
@@ -311,7 +310,7 @@ def check_directories(args):
 		if args.feats_dir not in [None, "None", "none"]:
 			suffix += "_"+args.fusion_location+","+args.fusion
 		if args.separate_branches:
-			suffix += "_"+args.fusion
+			suffix += "_mb"
 		suffix += "_"+args.omics
 		if not args.selected_features:
 			suffix += "_all"

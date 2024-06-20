@@ -145,7 +145,7 @@ def setup_argparse():
 	parser.add_argument('--separate_branches',     	 action='store_true', default=False)
 	parser.add_argument('--selected_features',     	 action='store_true', default=False)
 	parser.add_argument('--mode',            type=str, choices=['omic', 'path', 'pathomic', 'cluster', 'coattn'], default='coattn', help='Specifies which modalities to use / collate function in dataloader.')
-	parser.add_argument('--fusion',        type=str, choices=["crossatt", "concat", "adaptive", "multiply", "bilinear", None], default=None)
+	parser.add_argument('--fusion',        type=str, choices=["dynatt", "gatedcatt", "crossatt", "concat", "adaptive", "multiply", "bilinear", None], default=None)
 	parser.add_argument('--fusion_location',   type=str, choices=["early", "mid", "ms", "late", None], default=None)
 	parser.add_argument('--apply_sig',		 action='store_true', default=False, help='Use genomic features as signature embeddings.')
 	parser.add_argument('--model_size_wsi',  type=str, default='small', help='Network size of AMIL model')

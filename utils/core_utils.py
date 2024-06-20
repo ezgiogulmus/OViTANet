@@ -65,6 +65,13 @@ def init_model(args, ckpt_path=None, print_model=False):
 	
 	if args.opt == "adam":
 		optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=args.reg)
+		if args.model_type == "gmcat":
+			optimizer = torch.optim.Adam([
+				{'params': model.transformer.parameters(), 'lr': args.lr/10},
+				{'params': model.classifier.parameters(), 'lr': args.lr},
+				{'params': model.patch_encoding.parameters(), 'lr': args.lr},
+				{'params': model.tabular_encoding.parameters(), 'lr': args.lr},
+			], weight_decay=args.reg)
 	elif args.opt == 'sgd':
 		optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, weight_decay=args.reg)
 	else:
@@ -352,7 +359,10 @@ def loop_survival(
 		if not training:
 			writer.add_scalar(f'{split}/mean_auc', mean_auc, epoch)
 			writer.add_scalar(f'{split}/ibs', ibs, epoch)
-			writer.add_scalar(f'{split}/lr', scheduler.get_last_lr(), epoch)
+			last_lr = scheduler.get_last_lr()
+			if isinstance(last_lr, list):
+				last_lr = last_lr[0]
+			writer.add_scalar(f'{split}/lr', last_lr, epoch)
 		
 	if early_stopping:
 		assert results_dir
@@ -375,11 +385,10 @@ def eval_model(dataset, results_dir, args, cur, return_feats=True):
 	"""
 	print("Testing on {} samples".format(len(dataset)))
 
-	model, _, loss_fn, _ = init_model(args, print_model=True if cur == 0 else False)
-	model.load_state_dict(torch.load(os.path.join(args.load_from, f"s_{cur}_checkpoint.pt")))
-	
+	model, _, loss_fn, _ = init_model(args, print_model=True if cur == 0 else False, ckpt_path=os.path.join(args.load_from, f"s_{cur}_checkpoint.pt"))
+		
 	print('\nInit Data Loader...', end=' ')
-	test_loader = get_split_loader(dataset, batch_size=args.batch_size)
+	test_loader = get_split_loader(dataset, batch_size=args.batch_size, separate_branches=args.separate_branches)
 	print('Done!')
 	
 	cindex, _, _, loss = loop_survival(cur, model, test_loader, loss_fn=loss_fn, results_dir=results_dir, return_feats=return_feats, dataname=args.data_name, discrete_time=True if args.surv_model == "discrete" else False, mode=args.mode,cidx_only=True)

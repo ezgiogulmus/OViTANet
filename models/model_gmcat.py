@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.mlp_model import MB_MLP
 from models.model_utils import SimpleEncoder, SimpleFusion, Transformer, initialize_weights
 
 
@@ -18,14 +19,17 @@ class GMCAT(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, path_input_dim))
         self.pool = pool
 
-        self.mm_fusion = mm_fusion if nb_tabular_data > 0 else None
-        self.mm_fusion_type = mm_fusion_type if nb_tabular_data > 0 else None
+        self.mm_fusion = mm_fusion if nb_tabular_data != 0 else None
+        self.mm_fusion_type = mm_fusion_type if nb_tabular_data != 0 else None
         if self.mm_fusion == "crossatt":
             assert self.mm_fusion_type in ["mid", "ms"]
         
         self.patch_encoding = SimpleEncoder(path_input_dim, dim)
-        if nb_tabular_data > 0:
-            self.tabular_encoding = SimpleEncoder(nb_tabular_data, dim, drop_out)
+        if nb_tabular_data != 0:
+            if isinstance(nb_tabular_data, list):
+                self.tabular_encoding = MB_MLP(nb_tabular_data, target_features=dim, feat_extractor=True, mm_fusion="concat" if mm_fusion != "crossatt" else "bilinear", **kwargs)
+            else:
+                self.tabular_encoding = SimpleEncoder(nb_tabular_data, dim, drop_out)
         
         self.fuser = SimpleFusion(self.mm_fusion, dim) if self.mm_fusion != "crossatt" else None
         
@@ -51,14 +55,15 @@ class GMCAT(nn.Module):
         # Encode inputs
         x = self.patch_encoding(x)
         if kwargs["x_tabular"] is not None:
-            tab_feats = self.tabular_encoding(kwargs["x_tabular"].unsqueeze(0))
+            tab_feats = self.tabular_encoding(kwargs["x_tabular"]).unsqueeze(0)
         
         # Early fusion
         if self.mm_fusion_type == "early":
             x = self.fuser([x, tab_feats])
         
-        x, attn_weights = self.transformer(x, tab_feats)
-        
+        x = self.transformer(x, tab_feats, return_attn=kwargs["return_feats"])
+        if isinstance(x, tuple):
+            x, attn_weights = x
         x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
         # Late fusion
         if self.mm_fusion_type == "late":
@@ -76,29 +81,32 @@ if __name__ == "__main__":
     np.random.seed(0)
     a = torch.FloatTensor(np.random.randn(2, 768))
     b = torch.FloatTensor(np.random.randn(1, 10))
+    c = torch.FloatTensor(np.random.randn(1, 20))
     torch.random.manual_seed(0)
     torch.use_deterministic_algorithms(True)
 
     print(a[0, 0], b[0, 0])
     for i in ["mid", "ms"]:
         for j in ["adaptive", "multiply", "concat", "bilinear", "crossatt"]:
-            model = GMCAT(nb_tabular_data=10, mm_fusion=j, 
+            model = GMCAT(nb_tabular_data=[10, 20], mm_fusion=j, 
                 mm_fusion_type=i, n_classes=4, path_input_dim=768, 
                 dim=64, depth=5, mha_heads=4, 
                 mlp_dim=64, pool = 'cls', dim_head = 16, 
                 drop_out = 0.0
                 )
-            out = model(x_path=a, x_tabular=b, return_feats=False)
+            out = model(x_path=a, x_tabular=[b, c], return_feats=False)
             print(i, j, out)
+            print(model)
+            break
             
-    for i in ["early", "late"]:
-        for j in ["adaptive", "multiply", "concat", "bilinear"]:
-            model = GMCAT(nb_tabular_data=10, mm_fusion=j, 
-                mm_fusion_type=i, n_classes=4, path_input_dim=768, 
-                dim=64, depth=5, mha_heads=4, 
-                mlp_dim=64, pool = 'cls', dim_head = 16, 
-                drop_out = 0.0
-                )
-            out = model(x_path=a, x_tabular=b, return_feats=False)
-            print(i, j, out)
+    # for i in ["early", "late"]:
+    #     for j in ["adaptive", "multiply", "concat", "bilinear"]:
+    #         model = GMCAT(nb_tabular_data=[10, 20], mm_fusion=j, 
+    #             mm_fusion_type=i, n_classes=4, path_input_dim=768, 
+    #             dim=64, depth=5, mha_heads=4, 
+    #             mlp_dim=64, pool = 'cls', dim_head = 16, 
+    #             drop_out = 0.0
+    #             )
+    #         out = model(x_path=a, x_tabular=[b, c], return_feats=False)
+    #         print(i, j, out)
             

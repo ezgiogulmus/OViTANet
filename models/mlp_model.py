@@ -79,17 +79,18 @@ class MB_MLP(nn.Module):
         super(MB_MLP, self).__init__()
         self.feat_extractor = feat_extractor
         self.encoders = nn.ModuleList([MLP(nb_tabular_data[i], feat_extractor=True, target_features=target_features, **kwargs) for i in range(len(nb_tabular_data))])
-        self.fuser = SimpleFusion(mm_fusion, target_features, nb_of_vectors=len(nb_tabular_data))
-        
-        if mm_fusion == "concat":
-            target_features *= len(nb_tabular_data)
+        self.fuser = None
+        if mm_fusion == "bilinear":
+            self.fuser = SimpleFusion(mm_fusion, target_features, nb_of_vectors=len(nb_tabular_data))
+            
         if not feat_extractor:
             self.classifier = nn.Linear(target_features, n_classes)
 
     def forward(self, omics_list):
         assert len(omics_list) == len(self.encoders), "Something's wrong!"
         encoded_omics = [self.encoders[i](omics_list[i]) for i in range(len(omics_list))]
-        fused_omics = self.fuser(encoded_omics)
+        fused_omics = self.fuser(encoded_omics) if self.fuser is not None else torch.cat(encoded_omics, dim=0)
+        
         if self.feat_extractor:
             return fused_omics
         return self.classifier(fused_omics)
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     torch.use_deterministic_algorithms(True)
 
     print(a[0, 0], b[0, 0], c[0, 0])
-    for fusion in ["concat", "adaptive", "multiply", "bilinear"]:
+    for fusion in ["concat", "bilinear"]:
         model = MB_MLP([dim1, dim2, dim3], mm_fusion=fusion)
         out = model([a, b, c])
         print(fusion, out)

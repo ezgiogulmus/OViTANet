@@ -41,7 +41,8 @@ def main(eval_args):
 	print("split_dir", args.split_dir)
 	assert os.path.isdir(args.split_dir), "Incorrect the split directory: " + args.split_dir
 
-	args.csv_path = os.path.join(args.dataset_dir, args.data_name+".csv")
+	if args.test_all:
+		args.csv_path = os.path.join(args.dataset_dir, args.data_name+".csv")
 	print("csv_path", args.csv_path)
 	assert os.path.isfile(args.csv_path), "Incorrect csv file path: " + args.csv_path
 	
@@ -62,6 +63,7 @@ def main(eval_args):
 	surv_dataset = MIL_Survival_Dataset(
 		df=df,
 		data_dir= args.feats_dir,
+		separate_branches=args.separate_branches,
 		mode= args.mode,
 		print_info = True,
 		n_bins=args.n_classes,
@@ -88,7 +90,8 @@ def main(eval_args):
 			dataset = surv_dataset.return_splits(return_all=True, stats_path=os.path.join(args.results_dir, f'train_stats_{cv}.csv'))
 		else:
 			assert args.data_name in args.split_dir, "Testing is only possible for the same dataset."
-			_, _, dataset = surv_dataset.return_splits(cv)
+			datasets, train_stats = dataset.return_splits(os.path.join(args.split_dir, f"splits_{cv}.csv"))
+			dataset = datasets[-1]
 		
 		result_latest = eval_model(dataset, args.results_dir, args, cv)
 	

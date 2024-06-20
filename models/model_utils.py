@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import math
+from models.dyn_crossatt import DynamicCrossAttention
+
 
 class SimpleEncoder(nn.Module):
     def __init__(self, input_dim, output_dim, dropout=0.1):
@@ -151,17 +153,20 @@ class Gated_Attention(nn.Module):
 
         
 class MultiHeadAttention(nn.Module):
-    def __init__(self, dim, heads=8, dim_head=64, dropout=0., cross_attention=True):
+    def __init__(self, dim, heads=8, dim_head=64, dropout=0., cross_attention=True, gated_attention=True):
         super().__init__()
         self.cross_attention = cross_attention
+        self.gated_attention = gated_attention
         self.heads = heads
         self.dim_head = dim_head
         self.scale = 1 / math.sqrt(self.dim_head)
         inner_dim = dim_head * heads
 
-        self.norm = nn.LayerNorm(dim)
-
         if cross_attention:
+            self.tab_norm = nn.LayerNorm(dim)
+        self.img_norm = nn.LayerNorm(dim)
+
+        if gated_attention:
             self.to_q = Gated_Attention(dim, inner_dim, dropout=dropout)
         else:
             self.to_q = nn.Linear(dim, inner_dim, bias=False)
@@ -177,16 +182,18 @@ class MultiHeadAttention(nn.Module):
     def forward(self, img, tab, return_weights=False):
         attn_dict = {}
         # Normalize both vectors
-        img = self.norm(img)
+        img = self.img_norm(img)
         if self.cross_attention:
-            tab = self.norm(tab)
+            tab = self.tab_norm(tab)
+        else:
+            tab = img
 
         # Gated attention for query
-        if self.cross_attention:
+        if self.gated_attention:
             q, gate_weights = self.to_q(img, tab)
             attn_dict["gate"] = gate_weights
         else:
-            q = self.to_q(img)
+            q = self.to_q(tab)
         k, v = self.to_kv(img).chunk(2, dim=-1)
         b, n = q.shape[:2]
         q, k, v = map(lambda t: t.view(b, -1, self.heads, self.dim_head).transpose(1, 2), [q, k, v]) # B, H, N, D
@@ -228,30 +235,37 @@ class Transformer(nn.Module):
         self.mm_fusion = mm_fusion
         self.hierarchical = hierarchical and mm_fusion
 
-        self.fuser = fuser
-        
+        self.fuser = fuser if mm_fusion not in ["dynatt", "crossatt", "gatedcatt"] else None
+        if mm_fusion == "dynatt":
+            cross_att_module = DynamicCrossAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)
+        if mm_fusion == "crossatt":
+            cross_att_module = MultiHeadAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout, cross_attention=True, gated_attention=False)
+        if mm_fusion == "gatedcatt":
+            cross_att_module = MultiHeadAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout, cross_attention=True, gated_attention=True)
+        self_att_module = MultiHeadAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout, cross_attention=False, gated_attention=False)
+
         self.norm = nn.LayerNorm(dim)
         layers = []
         for i in range(depth):
             layers.append(nn.ModuleList([
-                MultiHeadAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout, cross_attention=True if self.mm_fusion == "crossatt" and (self.hierarchical or i == depth-1) else False),
+                cross_att_module if self.mm_fusion == "crossatt" and (self.hierarchical or i == depth-1) else self_att_module,
                 FeedForward(dim, mlp_dim, dropout=dropout)
             ]))
 
         self.layers = nn.Sequential(*layers)
 
-    def forward(self, x, tab):
+    def forward(self, x, tab, return_attn=False):
         attn_weights = None 
         return_weights = False 
         fusion = True if self.hierarchical else False
         for i, (attn, ff) in enumerate(self.layers):            
             if i == len(self.layers) - 1:
-                return_weights = True
+                return_weights = True if return_attn else False
                 fusion = True
             if fusion:
                 if self.fuser is not None:
                     x = self.fuser([x, tab])
-                att_out = attn(x, tab=tab if self.mm_fusion =="crossatt" else None, return_weights=return_weights)
+                att_out = attn(x, tab=tab, return_weights=return_weights)
             else:
                 att_out = attn(x, tab=None, return_weights=return_weights)
             if isinstance(att_out, tuple):
@@ -259,6 +273,8 @@ class Transformer(nn.Module):
                 
             x = att_out + x
             x = ff(x) + x
+        if not return_attn:
+            return self.norm(x)
         return self.norm(x), attn_weights
     
 
@@ -268,7 +284,10 @@ def initialize_weights(module):
             nn.init.xavier_normal_(m.weight)
             if m.bias is not None:
                 m.bias.data.zero_()
-        
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+            
         elif isinstance(m, nn.BatchNorm1d):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
